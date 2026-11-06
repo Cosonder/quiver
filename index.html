@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quiver Mutation</title>
   <meta name="description" content="Draw quivers and ice quivers in the browser and explore quiver mutation, path algebras and Auslander–Reiten quivers.">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css?v=0.16.11">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <header class="topbar">
@@ -285,7 +286,7 @@
         <li><b>Arrow</b>: drag from the source to the target, or click the source and then the target. Repeat to get multiple arrows; an arrow in the opposite direction cancels one (quivers have no 2-cycles).</li>
         <li>With the <b>Delete</b> tool, clicking an arrow removes one arrow and clicking a vertex removes the vertex.</li>
         <li>With the <b>Select</b> tool, drag vertices to move them; <b>double-click a vertex</b> to mutate there.</li>
-        <li>The <b>Proof</b> panel in the bottom-right corner explains every step: each edit, each mutation (the three combinatorial steps checked against the matrix formula) and each dimension vector you highlight. The AR quiver window has its own Proof panel showing how the picture is computed.</li>
+        <li>The <b>Proof</b> panel in the bottom-right corner explains every step, typeset like a LaTeX document (KaTeX, Computer Modern fonts): each edit, each mutation (the three combinatorial steps checked against the matrix formula) and each dimension vector you highlight. The AR quiver window has its own Proof panel showing how the picture is computed.</li>
         <li>The <b>Path algebra kQ</b> panel on the right gives the dimension of kQ (or of the truncation kQ/R<sup>L</sup>) and the dimension vectors of the indecomposable projectives P(i), injectives I(i) and simples S(i). Click a row to show the dimension vector on the canvas and the radical / socle layers.</li>
         <li><b>AR quiver</b>: for the path algebra kQ of an acyclic quiver, the Auslander–Reiten quiver is computed by knitting. Dynkin types (A/D/E) give all indecomposables; Euclidean types also show the regular components (exceptional and homogeneous tubes); wild types show the first layers of the preprojective and preinjective components. In the window you can also switch to the bounded derived category D<sup>b</sup>(mod kQ) (ℤQ, with a chosen range of shifts) and the cluster category C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1] (all objects for Dynkin types, in bijection with cluster variables).</li>
       </ul>
@@ -307,8 +308,9 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="quiver-core.js?v=8"></script>
-  <script src="ar-core.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="vendor/katex/katex.min.js?v=0.16.11"></script>
+  <script src="quiver-core.js?v=9"></script>
+  <script src="ar-core.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

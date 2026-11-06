@@ -22,7 +22,7 @@ No build step and no dependencies: use the online version above, or open `index.
 - **AR quivers of the derived and cluster categories**: switch the category in the AR quiver window.
   - D^b(mod kQ): following Happel's theorem, ℤQ is knitted with signed classes in K₀ (τ⁻¹I(j) = P(j)[1]). For Dynkin types a range of shifts [a, b] can be chosen; for other types, the component containing the projectives (preinjectives[−1] ∪ preprojectives) is drawn, together with the tubes in degree [0].
   - Cluster category C_Q = D^b/τ⁻¹[1]: for Dynkin types, all indecomposable objects (indecomposable modules and the P(i)[1]; positive roots + n of them, in bijection with the cluster variables), with the wrap-around τ⁻¹(P(i)[1]) = P(i) marked; for other types, the transjective component … → I → P[1] → P → … together with the tubes.
-- **Proof panel**: a panel in the bottom-right corner explains every step that changes the picture.
+- **Proof panel**: a panel in the bottom-right corner explains every step that changes the picture. Proofs are written in LaTeX and typeset with KaTeX in Computer Modern, in the style of a LaTeX document (amsthm-like headings, *Proof.*, □).
   - Each edit is explained in terms of the matrix B (e.g. drawing an arrow sets b[i,j] and b[j,i] by skew-symmetry).
   - Each mutation μₖ is derived through the three steps (compose, reverse, cancel), then checked entry by entry against the matrix formula.
   - Highlighting a module's dimension vector shows the count of paths by length.
@@ -50,4 +50,5 @@ In the language of quiver representations: P(i)_j has a basis of the paths from 
 - `index.html`, `style.css`, `app.js`: page and interaction
 - `quiver-core.js`: mathematical core for mutation and path algebras (works in the browser and in Node)
 - `ar-core.js`: AR quivers (knitting, classification, tubes of the regular components, derived and cluster categories, layout)
+- `vendor/katex/`: KaTeX 0.16.11 (MIT license), used to typeset the proofs; bundled so the page also works offline
 - `tests/core.test.js`, `tests/ar.test.js`: tests; run `node tests/core.test.js && node tests/ar.test.js`
