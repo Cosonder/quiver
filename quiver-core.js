@@ -136,6 +136,149 @@
     ];
   }
 
+
+  // ------------------------------------------------------------------ 路代数
+  /*
+   * 路代数 kQ（或截断商 kQ/R^L，R 为箭头生成的理想）。
+   * 约定（以表示的语言）：
+   *   P(i)_j 的基 = 从 i 到 j 的路      （不可分解投射模，顶为 S(i)）
+   *   I(i)_j 的基 = 从 j 到 i 的路      （不可分解内射模，基座为 S(i)）
+   *   S(i)   = 在 i 处为 k，其余为 0    （单模）
+   * 长度为 l 的 i→j 路的条数 = (A^l)_ij，A 为箭头计数矩阵。
+   * 计数用 BigInt，避免多重箭头时溢出；无穷维用 null 表示。
+   */
+  function matMulBig(X, Y) {
+    const n = X.length;
+    const Z = [];
+    for (let i = 0; i < n; i++) {
+      const row = new Array(n).fill(0n);
+      for (let k = 0; k < n; k++) {
+        const x = X[i][k];
+        if (x === 0n) continue;
+        for (let j = 0; j < n; j++) if (Y[k][j] !== 0n) row[j] += x * Y[k][j];
+      }
+      Z.push(row);
+    }
+    return Z;
+  }
+
+  function isZeroBig(M) {
+    return M.every(function (r) { return r.every(function (x) { return x === 0n; }); });
+  }
+
+  /**
+   * @param A     非负箭头计数矩阵（A[i][j] = i→j 的箭头数）
+   * @param opts  { truncate: L }  L 为正整数时计算 kQ/R^L（长度 ≥ L 的路为 0）
+   * @return {
+   *   n, acyclic, finite, truncate,
+   *   paths : n×n，paths[i][j] = i→j 的路数（BigInt；无穷为 null）
+   *   powers: [A^0, A^1, ...] 非零的幂（有限情形全部；无穷情形前若干个）
+   *   dim   : 代数总维数（BigInt 或 null）
+   *   loewy : Loewy 长度（有限时 = 最长路长度 + 1）
+   *   onCycle: 位于有向圈上的顶点
+   * }
+   */
+  function pathAlgebra(A, opts) {
+    opts = opts || {};
+    const n = A.length;
+    const L = opts.truncate && opts.truncate > 0 ? Math.floor(opts.truncate) : null;
+    const A1 = A.map(function (r) { return r.map(function (x) { return BigInt(x); }); });
+    const I = [];
+    for (let i = 0; i < n; i++) {
+      const r = new Array(n).fill(0n);
+      r[i] = 1n;
+      I.push(r);
+    }
+
+    // 可达性（长度 ≥ 1）与有向圈上的顶点
+    const reach = A.map(function (r) { return r.map(function (x) { return x > 0; }); });
+    for (let k = 0; k < n; k++)
+      for (let i = 0; i < n; i++)
+        if (reach[i][k])
+          for (let j = 0; j < n; j++)
+            if (reach[k][j]) reach[i][j] = true;
+    const onCycle = [];
+    for (let i = 0; i < n; i++) if (reach[i][i]) onCycle.push(i);
+    const acyclic = onCycle.length === 0;
+
+    // 需要的幂的个数：有限情形最多 n 个（A^n = 0），截断时 L 个
+    const finite = acyclic || L != null;
+    const maxPow = L != null ? (acyclic ? Math.min(L, n) : L) : (acyclic ? n : Math.max(n, 6));
+    const powers = [I];
+    let cur = I;
+    for (let l = 1; l < maxPow; l++) {
+      cur = matMulBig(cur, A1);
+      if (isZeroBig(cur)) break;
+      powers.push(cur);
+    }
+
+    const paths = [];
+    for (let i = 0; i < n; i++) {
+      const row = [];
+      for (let j = 0; j < n; j++) {
+        if (finite) {
+          let s = 0n;
+          for (let l = 0; l < powers.length; l++) s += powers[l][i][j];
+          row.push(s);
+        } else {
+          // 无穷当且仅当存在圈上顶点 c 使 i →* c →* j
+          let inf = false;
+          for (const c of onCycle) {
+            if ((i === c || reach[i][c]) && (c === j || reach[c][j])) { inf = true; break; }
+          }
+          if (inf) row.push(null);
+          else {
+            let s = 0n;
+            for (let l = 0; l < powers.length; l++) s += powers[l][i][j];
+            row.push(s);
+          }
+        }
+      }
+      paths.push(row);
+    }
+
+    let dim = 0n;
+    for (let i = 0; i < n && dim !== null; i++)
+      for (let j = 0; j < n; j++) {
+        if (paths[i][j] === null) { dim = null; break; }
+        dim += paths[i][j];
+      }
+
+    return {
+      n: n,
+      acyclic: acyclic,
+      finite: finite,
+      truncate: L,
+      onCycle: onCycle,
+      paths: paths,
+      powers: powers,
+      dim: dim,
+      loewy: finite ? powers.length : null
+    };
+  }
+
+  /** P(i) 的维数向量（第 i 行）*/
+  function projectiveDim(pa, i) { return pa.paths[i].slice(); }
+  /** I(i) 的维数向量（第 i 列）*/
+  function injectiveDim(pa, i) { return pa.paths.map(function (r) { return r[i]; }); }
+
+  /** 维数向量求和（null 表示无穷）*/
+  function totalDim(v) {
+    let s = 0n;
+    for (const x of v) { if (x === null) return null; s += x; }
+    return s;
+  }
+
+  /**
+   * P(i) 的根层（radical layers）：第 l 层 rad^l P(i) / rad^{l+1} P(i) 的维数向量
+   * = 从 i 出发、长度恰为 l 的路的终点统计。I(i) 的基座层类似（kind = 'I'）。
+   */
+  function layers(pa, i, kind) {
+    return pa.powers.map(function (M) {
+      return kind === 'I' ? M.map(function (r) { return r[i]; }) : M[i].slice();
+    });
+  }
+
   /** 检查矩阵是否斜对称 */
   function isSkewSymmetric(B) {
     for (let i = 0; i < B.length; i++)
@@ -150,7 +293,12 @@
     toCounts: toCounts,
     mutate: mutate,
     mutationStages: mutationStages,
-    isSkewSymmetric: isSkewSymmetric
+    isSkewSymmetric: isSkewSymmetric,
+    pathAlgebra: pathAlgebra,
+    projectiveDim: projectiveDim,
+    injectiveDim: injectiveDim,
+    totalDim: totalDim,
+    layers: layers
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

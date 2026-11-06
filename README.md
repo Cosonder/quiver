@@ -1,8 +1,10 @@
 # quiver
 
+**在线使用：<https://cosonder.github.io/quiver/>**
+
 一个纯前端的网页工具：绘制**箭图（quiver）**与**冰箭图（ice quiver）**，并演示**箭图变异（quiver mutation）**。
 
-无需构建、无依赖，直接用浏览器打开 `index.html` 即可（也可以通过 GitHub Pages 发布）。
+无需构建、无依赖，可以直接访问上面的在线地址，也可以在本地用浏览器打开 `index.html`。
 
 ## 功能
 
@@ -11,6 +13,8 @@
 - **变异 μₖ**：点击顶点即可变异；支持输入变异序列（如 `1 2 1`）、随机变异、回到初始种子、撤销/重做。
 - **分步演示**：把变异拆成三步动画展示——补全路径 i → k → j、反转与 k 相连的箭头、删除 2-圈（以及冰冻顶点之间的箭头）。
 - **交换矩阵**：实时显示扩展交换矩阵 B̃（或完整斜对称矩阵），并可直接编辑。
+- **路代数**：计算路代数 kQ 的维数（Q 有向圈时为无穷维，可改用截断 kQ/R^L），以及每个顶点的不可分解投射模 P(i)、不可分解内射模 I(i)、单模 S(i) 的维数向量和维数；可在画布上标出维数向量，并查看 P(i) 的根层、I(i) 的基座层。
+- **Auslander–Reiten 箭图**：对无圈箭图的路代数 kQ，用编织（knitting）算法计算 AR 箭图，并判别底图类型（Dynkin / Euclidean / wild）。Dynkin 型（A/D/E）画出全部不可分解模（个数等于正根个数）；Euclidean 和 wild 型画出预投射、预内射分支的前若干层。可显示维数向量或 τ 轨道名称，点击模查看其维数向量、同构的投射/内射/单模、直接前驱和后继。
 - **示例**：A₃、A₄、D₄、三角循环、Kronecker、Markov、A₂/A₃ 加主系数、Gr(2,5)、Gr(2,6) 的冰箭图。
 - **导入/导出**：JSON、斜对称矩阵文本、TikZ 代码。
 
@@ -25,8 +29,13 @@ b'_ij = b_ij + (|b_ik| b_kj + b_ik |b_kj|) / 2  否则
 
 冰箭图中冰冻顶点之间的 b'_ij 恒为 0。
 
+## 路代数的约定
+
+用箭图表示的语言：P(i)_j 的基为从 i 到 j 的路，I(i)_j 的基为从 j 到 i 的路，S(i) 只在 i 处为 k。长度为 l 的 i → j 的路的条数为 (A^l)_ij，其中 A 是箭头计数矩阵；冰箭图默认包含冰冻顶点，也可以只用可变部分。
+
 ## 文件
 
 - `index.html`、`style.css`、`app.js`：页面与交互
-- `quiver-core.js`：变异的数学核心（浏览器与 Node 通用）
-- `tests/core.test.js`：核心测试，运行 `node tests/core.test.js`
+- `quiver-core.js`：变异与路代数的数学核心（浏览器与 Node 通用）
+- `ar-core.js`：AR 箭图（编织算法、底图分类、布局）
+- `tests/core.test.js`、`tests/ar.test.js`：测试，运行 `node tests/core.test.js && node tests/ar.test.js`
