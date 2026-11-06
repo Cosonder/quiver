@@ -366,6 +366,9 @@ dialog.dlg-wide.compact { height: auto; width: min(640px, calc(100% - 24px)); }
 .ar-node.regular rect { stroke: var(--accent); stroke-opacity: .55; }
 .ar-node.regular.rsimple rect { stroke-opacity: 1; stroke-width: 1.8; }
 .ar-node.ghost { opacity: .45; }
+.ar-node.odd:not(.sel):not(.nb) rect { fill: var(--grid); }
+.ar-node.shiftp rect { stroke: var(--red); stroke-width: 2; }
+#ar-dmin, #ar-dmax { width: 48px; }
 .ar-node.ghost rect { stroke-dasharray: 3 3; }
 .ar-comp { fill: var(--muted); font-size: 12px; font-weight: 600; }
 .ar-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
@@ -375,6 +378,8 @@ dialog.dlg-wide.compact { height: auto; width: min(640px, calc(100% - 24px)); }
 .ar-legend .sw.inj { border-color: var(--orange); }
 .ar-legend .sw.projinj { border-color: var(--green); }
 .ar-legend .sw.regular { border-color: var(--accent); }
+.ar-legend .sw.shiftp { border-color: var(--red); }
+.ar-legend .sw.odd { background: var(--grid); }
 .ar-order { margin-left: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ar-info { font-size: 13px; min-height: 2.6em; }
 .ar-warn { color: var(--orange); }

@@ -579,6 +579,220 @@
     return v;
   }
 
+  // ------------------------------------------------------------------ 导出范畴与丛范畴
+  /*
+   * Happel：D^b(mod kQ) 的 AR 箭图中含有投射模的分支是 ℤQ（Q 为 Dynkin 时就是整个 AR 箭图）。
+   * 顶点 (r, i) 表示 τ^{-r}P(i)（r ∈ ℤ），箭头与 mod kQ 中相同：
+   *   (r, j) → (r, i) 与 (r, i) → (r+1, j)，对每个箭头 i → j。
+   * 在 K₀ 中，AR 三角 τX → E → X → τX[1] 给出 [τX] + [X] = [E]，
+   * 所以可以用带符号的类“编织”，不在内射模处停止：τ⁻¹I(j) = P(j)[1]，τP(j) = I(j)[−1]。
+   * 对象 M[d] 的类为 (−1)^d [M]；沿 τ 轨道每当类变号，平移次数 d 就加一（或减一）。
+   *
+   * 丛范畴 C_Q = D^b / ⟨F⟩，F = τ⁻¹[1]：
+   *   Dynkin 型：不可分解对象 = 不可分解模 ∪ {P(i)[1]}，τ⁻¹(P(i)[1]) = P(i)（绕回）；
+   *   其他类型：转移分支 (transjective) 为 ℤQ：… → τI → I → P[1] → P → τ⁻¹P → …，
+   *            正则分支与 mod kQ 中相同（Euclidean 型为管）。
+   */
+  function signOf(v) {
+    if (v.every((x) => x >= 0)) return 1;
+    if (v.every((x) => x <= 0)) return -1;
+    return 0;
+  }
+
+  /**
+   * @param A    无圈箭图的箭头计数矩阵
+   * @param opts {
+   *   category: 'derived' | 'cluster',
+   *   dmin, dmax : 导出范畴、Dynkin 型时显示的平移次数范围
+   *   layers     : 非 Dynkin 型时 ℤQ 窗口向两侧各延伸的 τ 步数
+   * }
+   * @return {
+   *   ok, reason, category, comps, P, I,
+   *   nodes: [{ id, r, i, cls, deg, dim, comp, shiftP, ghost, proj, inj, simple, x, row }]
+   *     cls 为 K₀ 中的类；dim 为模 M 的维数向量（对象为 M[deg]）；
+   *     丛范畴中 shiftP ≥ 0 表示对象为 P(shiftP)[1]；ghost 表示绕回时重复画出的顶点
+   *   edges, tau, total（丛范畴 Dynkin 型的不可分解对象个数）
+   * }
+   */
+  function derivedQuiver(A, opts) {
+    opts = opts || {};
+    const n = A.length;
+    const category = opts.category === 'cluster' ? 'cluster' : 'derived';
+    const R = Math.max(1, Math.min(Math.floor(opts.layers || 4), 30));
+    let dmin = Math.floor(opts.dmin != null ? opts.dmin : 0);
+    let dmax = Math.floor(opts.dmax != null ? opts.dmax : 1);
+    if (dmax < dmin) { const t = dmin; dmin = dmax; dmax = t; }
+    if (dmax - dmin > 6) dmax = dmin + 6;
+    if (!n) return { ok: false, reason: 'empty' };
+    const order = topoOrder(A);
+    if (!order) return { ok: false, reason: 'cyclic', cycle: findCycle(A) };
+    const sinkFirst = order.slice().reverse();
+
+    const base = arQuiver(A, { layers: R + 2 });
+    const P = base.P, I = base.I;
+    const comps = base.comps;
+    const compOf = new Array(n);
+    comps.forEach((c, ci) => c.verts.forEach((v) => { compOf[v] = ci; }));
+    const dynkin = (i) => comps[compOf[i]].kind === 'dynkin';
+    const key = (v) => v.join(',');
+    const projIdx = new Map(P.map((v, j) => [key(v), j]));
+    const injIdx = new Map(I.map((v, j) => [key(v), j]));
+
+    // ---- 编织 ℤQ：cls.get(r)[i]，deg.get(r)[i]
+    const cls = new Map(), deg = new Map();
+    cls.set(0, P.map((v) => v.slice()));
+    deg.set(0, new Array(n).fill(0));
+    const forward = (r) => { // 由 r 计算 r+1
+      const cur = cls.get(r), next = new Array(n);
+      for (const i of sinkFirst) {
+        const v = cur[i].map((t) => -t);
+        for (let k = 0; k < n; k++) if (A[k][i] > 0) cur[k].forEach((x, t) => { v[t] += A[k][i] * x; });
+        for (let j = 0; j < n; j++) if (A[i][j] > 0) next[j].forEach((x, t) => { v[t] += A[i][j] * x; });
+        next[i] = v;
+      }
+      cls.set(r + 1, next);
+      deg.set(r + 1, next.map((v, i) => deg.get(r)[i] + (signOf(v) !== signOf(cur[i]) ? 1 : 0)));
+    };
+    const backward = (r) => { // 由 r 计算 r−1
+      const cur = cls.get(r), prev = new Array(n);
+      for (const i of order) {
+        const v = cur[i].map((t) => -t);
+        for (let k = 0; k < n; k++) if (A[k][i] > 0) prev[k].forEach((x, t) => { v[t] += A[k][i] * x; });
+        for (let j = 0; j < n; j++) if (A[i][j] > 0) cur[j].forEach((x, t) => { v[t] += A[i][j] * x; });
+        prev[i] = v;
+      }
+      cls.set(r - 1, prev);
+      deg.set(r - 1, prev.map((v, i) => deg.get(r)[i] - (signOf(v) !== signOf(cur[i]) ? 1 : 0)));
+    };
+
+    // 需要的 r 范围
+    const anyDynkin = comps.some((c) => c.kind === 'dynkin');
+    const anyInf = comps.some((c) => c.kind !== 'dynkin');
+    let rLo = 0, rHi = 0;
+    const GUARD = 2000;
+    const needF = (d) => (category === 'derived' ? d <= dmax : d <= 1); // Dynkin：还需要向前编织
+    const needB = (d) => category === 'derived' && d >= dmin;            // Dynkin：还需要向后编织
+    while (rHi < GUARD) {
+      const d = deg.get(rHi);
+      const moreDyn = anyDynkin && d.some((x, i) => dynkin(i) && needF(x));
+      const moreInf = anyInf && rHi < R;
+      if (!moreDyn && !moreInf) break;
+      forward(rHi);
+      rHi++;
+    }
+    while (rLo > -GUARD) {
+      const d = deg.get(rLo);
+      const moreDyn = anyDynkin && d.some((x, i) => dynkin(i) && needB(x));
+      const moreInf = anyInf && rLo > -(category === 'cluster' ? R + 2 : R + 1);
+      if (!moreDyn && !moreInf) break;
+      backward(rLo);
+      rLo--;
+    }
+
+    // ---- 选出要画的顶点
+    const nodes = [];
+    const at = new Map();
+    const isUnit = (v) => v.filter((x) => x !== 0).length === 1 && v.reduce((a, b) => a + b, 0) === 1;
+    const add = (r, i, props) => {
+      const c = cls.get(r)[i], d = deg.get(r)[i];
+      const dim = d % 2 === 0 ? c.slice() : c.map((x) => -x || 0);
+      const node = Object.assign({
+        id: nodes.length, r: r, i: i, cls: c, deg: d, dim: dim, comp: compOf[i],
+        shiftP: -1, ghost: false
+      }, props || {});
+      node.proj = node.shiftP < 0 && projIdx.has(key(node.dim)) ? projIdx.get(key(node.dim)) : -1;
+      node.inj = node.shiftP < 0 && injIdx.has(key(node.dim)) ? injIdx.get(key(node.dim)) : -1;
+      node.simple = node.shiftP < 0 && isUnit(node.dim);
+      nodes.push(node);
+      at.set(r + ':' + i, node.id);
+      return node;
+    };
+    for (let r = rLo; r <= rHi; r++) {
+      for (let i = 0; i < n; i++) {
+        const d = deg.get(r)[i];
+        if (dynkin(i)) {
+          if (category === 'derived') {
+            if (d >= dmin && d <= dmax) add(r, i);
+          } else {
+            if (d === 0) add(r, i);
+            else if (d === 1 && projIdx.has(key(cls.get(r)[i].map((x) => -x || 0)))) {
+              add(r, i, { shiftP: projIdx.get(key(cls.get(r)[i].map((x) => -x || 0))) });
+            }
+          }
+        } else {
+          if (category === 'derived') {
+            if (r >= -R && r < R) add(r, i);
+          } else if (r >= -R - 1 && r < R) {
+            if (r >= 0) add(r, i);
+            else if (r === -1) add(r, i, { shiftP: i, dimOverride: null });
+            else {
+              // (r, i) 在 C_Q 中是 τ^{|r|−2} I(i)，其维数向量为 −[ (r+1, i) ]
+              const node = add(r, i);
+              node.deg = 0;
+              node.dim = cls.get(r + 1)[i].map((x) => -x || 0);
+              node.proj = projIdx.has(key(node.dim)) ? projIdx.get(key(node.dim)) : -1;
+              node.inj = injIdx.has(key(node.dim)) ? injIdx.get(key(node.dim)) : -1;
+              node.simple = isUnit(node.dim);
+            }
+          }
+        }
+      }
+    }
+    // 丛范畴、Dynkin 型：在 P(j)[1] 的 τ⁻¹ 位置重复画出 P(j)（绕回），标为 ghost
+    if (category === 'cluster') {
+      nodes.slice().forEach((nd) => {
+        if (nd.shiftP < 0 || !dynkin(nd.i)) return;
+        if (!cls.has(nd.r + 1)) forward(nd.r);
+        const g = add(nd.r + 1, nd.i, { ghost: true });
+        g.deg = 0;
+        g.dim = P[nd.shiftP].slice();
+        g.proj = nd.shiftP;
+        g.inj = injIdx.has(key(g.dim)) ? injIdx.get(key(g.dim)) : -1;
+        g.simple = isUnit(g.dim);
+      });
+      nodes.forEach((nd) => { if (nd.shiftP >= 0) nd.dim = P[nd.shiftP].slice(); });
+    }
+
+    // ---- 箭头与 τ
+    const edges = [], tau = [];
+    nodes.forEach((b) => {
+      const r = b.r, i = b.i;
+      for (let j = 0; j < n; j++) {
+        const m = A[i][j];
+        if (!m) continue;
+        const a1 = at.get(r + ':' + j);              // (r, j) → (r, i)
+        if (a1 != null) edges.push({ from: a1, to: b.id, mult: m });
+        const c1 = at.get((r + 1) + ':' + j);        // (r, i) → (r+1, j)
+        if (c1 != null) edges.push({ from: b.id, to: c1, mult: m });
+      }
+      const t = at.get((r - 1) + ':' + i);
+      if (t != null) tau.push({ from: b.id, to: t });
+    });
+
+    // ---- 布局
+    let rowStart = 0;
+    comps.forEach((comp, ci) => {
+      const h = heights(A, comp.verts);
+      const rows = rowOrder(A, comp.verts);
+      const rowOf = new Map(rows.map((v, t) => [v, rowStart + t]));
+      nodes.filter((nd) => nd.comp === ci).forEach((nd) => {
+        nd.row = rowOf.get(nd.i);
+        nd.x = nd.r * h.T + h.c.get(nd.i);
+      });
+      comp.rowStart = rowStart;
+      comp.rows = rows.length;
+      comp.gapX = null;
+      rowStart += rows.length + 1;
+    });
+
+    const total = category === 'cluster' && comps.every((c) => c.kind === 'dynkin')
+      ? nodes.filter((nd) => !nd.ghost).length : null;
+    return {
+      ok: true, category: category, comps: comps, P: P, I: I, layers: R, dmin: dmin, dmax: dmax,
+      finite: total != null, nodes: nodes, edges: edges, tau: tau, total: total
+    };
+  }
+
   const api = {
     components: components,
     topoOrder: topoOrder,
@@ -586,6 +800,7 @@
     kernelVector: kernelVector,
     tubes: tubes,
     tubeModuleDim: tubeModuleDim,
+    derivedQuiver: derivedQuiver,
     classify: classify,
     titsForm: titsForm,
     arQuiver: arQuiver

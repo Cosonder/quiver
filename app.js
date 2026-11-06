@@ -728,6 +728,52 @@
     drawAR();
   }
 
+  // ---- 导出范畴 / 丛范畴
+  let derCache = { key: null, value: null };
+  function arShiftRange() {
+    let a = parseInt($('ar-dmin').value, 10), b = parseInt($('ar-dmax').value, 10);
+    if (!Number.isFinite(a)) a = 0;
+    if (!Number.isFinite(b)) b = 1;
+    a = Math.max(-5, Math.min(5, a));
+    b = Math.max(-5, Math.min(5, b));
+    if (b < a) { const t = a; a = b; b = t; }
+    return [a, Math.min(b, a + 5)];
+  }
+  function computeDerived(cat) {
+    const info = computePA();
+    const [a, b] = arShiftRange();
+    const layers = arLayers();
+    const key = JSON.stringify([state.B, info.verts, cat, a, b, layers]);
+    if (derCache.key === key) return derCache.value;
+    const A = info.verts.map((i) => info.verts.map((j) => Math.max(state.B[i][j], 0)));
+    const D = AR.derivedQuiver(A, { category: cat, dmin: a, dmax: b, layers: layers });
+    derCache = { key: key, value: D };
+    return D;
+  }
+  function derivedSummary(D, value) {
+    const info = value.info;
+    const n = info.verts.length;
+    const names = D.comps.map((c) => c.name + (c.kind === 'euclidean' ? ' Euclidean' : '')).join(' ⊔ ');
+    const dyn = D.comps.every((c) => c.kind === 'dynkin');
+    const euclid = D.comps.some((c) => c.kind === 'euclidean');
+    const wild = D.comps.some((c) => c.kind === 'wild');
+    const shown = D.nodes.filter((x) => !x.ghost).length;
+    if (D.category === 'derived') {
+      if (dyn) {
+        return '<b>D<sup>b</sup>(mod kQ)</b>（' + names + '）：AR 箭图是 ℤQ（Happel 定理）。每个平移 [d] 是 mod kQ 的一份拷贝，相邻两份由 τ⁻¹I(j) = P(j)[1] 连接。' +
+          '图中显示平移 [' + D.dmin + '] 到 [' + D.dmax + ']，共 ' + shown + ' 个对象；平移奇数次的对象带底色。';
+      }
+      return '<b>D<sup>b</sup>(mod kQ)</b>（' + names + '）：图中是含投射模的分支 ℤQ = 预内射模[−1] ∪ 预投射模，τ 方向两侧各 ' + D.layers + ' 步。' +
+        '其余分支是它的平移 [d]，以及正则分支的平移' + (euclid ? '（Euclidean 型为管，下方画出平移 [0] 的管）' : '') + (wild ? '（wild 型为 ℤA∞ 型，未画出）' : '') + '。';
+    }
+    if (dyn) {
+      return '<b>丛范畴 C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1]</b>（' + names + '）：共 <b>' + D.total + '</b> 个不可分解对象 = ' + (D.total - n) + ' 个不可分解模 + ' + n +
+        ' 个 P(i)[1]（红框），与丛代数的丛变量一一对应。虚线框是绕回时重复画出的 P(i)：τ⁻¹(P(i)[1]) = P(i)。';
+    }
+    return '<b>丛范畴 C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1]</b>（' + names + '）：转移分支是 ℤQ：… → τI → I → P[1] → P → τ⁻¹P → …（两侧各约 ' + D.layers + ' 步，P(i)[1] 为红框）；' +
+      '正则分支与 mod kQ 中相同' + (euclid ? '（下方画出管）' : '') + (wild ? '（wild 型未画出）' : '') + '。';
+  }
+
   function drawAR() {
     const value = computeAR();
     const ar = value.ar, info = value.info;
@@ -748,20 +794,47 @@
       return;
     }
 
-    // ---- 统一的绘制对象：AR 箭图中的模 + 管中的模
+    // ---- 选择范畴
+    const cat = $('ar-cat').value;
+    const D = cat === 'mod' ? null : computeDerived(cat);
+    const src = D || ar;
+    const hasInf = src.comps.some((c) => c.kind !== 'dynkin');
+    if (D) $('ar-desc').innerHTML = derivedSummary(D, value);
+    $('ar-layers-wrap').hidden = !hasInf;
+    $('ar-shift-wrap').hidden = !(cat === 'derived' && src.comps.some((c) => c.kind === 'dynkin'));
+
+    // ---- 统一的绘制对象：AR 箭图中的对象 + 管中的模
     const mode = $('ar-label').value;
     const showReg = hasEuclid && $('ar-reg').checked;
     const L = arLayers();
-    const items = ar.nodes.map((nd) => ({
+    const modNames = new Map();
+    ar.nodes.forEach((nd) => { const k = nd.dim.join(','); if (!modNames.has(k)) modNames.set(k, arNodeName(nd, info)); });
+    const derItem = (nd) => {
+      let name, dimText;
+      if (nd.shiftP >= 0) {
+        name = dimText = 'P' + vlabel(info, nd.shiftP) + '[1]';
+      } else {
+        const suf = nd.deg ? '[' + nd.deg + ']' : '';
+        name = (modNames.get(nd.dim.join(',')) || '(' + nd.dim.join(',') + ')') + suf;
+        dimText = dimLabel(nd.dim) + suf;
+      }
+      const plain = nd.deg === 0 && nd.shiftP < 0;
+      return {
+        id: nd.id, kind: 'der', nd: nd, dim: nd.dim, name: name, dimText: dimText,
+        proj: plain && nd.proj >= 0, inj: plain && nd.inj >= 0, simple: plain && nd.simple,
+        ghost: nd.ghost, odd: nd.deg % 2 !== 0, shiftp: nd.shiftP >= 0
+      };
+    };
+    const items = D ? D.nodes.map(derItem) : ar.nodes.map((nd) => ({
       id: nd.id, kind: 'ar', nd: nd, dim: nd.dim,
       name: arNodeName(nd, info),
       proj: nd.proj >= 0, inj: nd.inj >= 0, simple: nd.simple
     }));
-    const links = ar.edges.map((e) => ({ from: e.from, to: e.to, mult: e.mult, curve: Math.abs(ar.nodes[e.from].row - ar.nodes[e.to].row) >= 2 }));
-    const taus = ar.tau.slice();
+    const links = src.edges.map((e) => ({ from: e.from, to: e.to, mult: e.mult, curve: Math.abs(src.nodes[e.from].row - src.nodes[e.to].row) >= 2 }));
+    const taus = src.tau.slice();
     const tubeBoxes = []; // 管的外框信息
     if (showReg) {
-      ar.comps.forEach((c, ci) => {
+      src.comps.forEach((c, ci) => {
         if (c.kind !== 'euclidean' || !c.regular) return;
         if (!c.regular.ok) { tubeBoxes.push({ comp: c, failed: true }); return; }
         const list = c.regular.tubes.map((t, ti) => ({ rank: t.rank, simples: t.simples, homog: false, index: ti + 1 }));
@@ -798,12 +871,12 @@
     }
     if (arSel != null && !items[arSel]) arSel = null;
 
-    const text = (it) => (mode === 'name' ? it.name : dimLabel(it.dim));
+    const text = (it) => (mode === 'name' ? it.name : (it.dimText || dimLabel(it.dim)));
     const widths = items.map((it) => Math.max(26, text(it).length * 7.4 + 12));
     const maxW = Math.max.apply(null, widths);
     const UX = Math.max(26, (maxW + 12) / 2), UY = 46, PAD = 34, HH = 11;
-    const multi = ar.comps.length > 1;
-    const nodes = ar.nodes;
+    const multi = src.comps.length > 1;
+    const nodes = src.nodes;
     const minX = Math.min.apply(null, nodes.map((nd) => nd.x));
     const maxX = Math.max.apply(null, nodes.map((nd) => nd.x));
     const maxRow = Math.max.apply(null, nodes.map((nd) => nd.row));
@@ -828,7 +901,7 @@
         const x0 = cursor;
         b.cells.forEach((it) => { it.X = x0 + it.tx * UX; it.Y = top + 1.15 * UY + (L - it.l) * UY; });
         const bottom = top + 1.15 * UY + (L - 1) * UY;
-        const title = (multi ? b.comp.name + ' · ' : '') + (b.tube.homog ? '齐次管（rank 1）' : '例外管 ' + b.tube.index + '（rank ' + r + '）');
+        const title = (multi ? b.comp.name + ' · ' : '') + (b.tube.homog ? '齐次管（rank 1）' : '例外管 ' + b.tube.index + '（rank ' + r + '）') + (cat === 'derived' ? ' [0]' : '');
         decorations.push({ type: 'text', x: x0 + r * UX, y: top, text: title, cls: 'ar-tube-title' });
         decorations.push({ type: 'vline', x: x0, y1: top + 0.45 * UY, y2: bottom + 0.5 * UY });
         decorations.push({ type: 'vline', x: x0 + 2 * r * UX, y1: top + 0.45 * UY, y2: bottom + 0.5 * UY });
@@ -893,7 +966,7 @@
     });
 
     // 分支名称与规则分支的位置
-    ar.comps.forEach((c) => {
+    src.comps.forEach((c) => {
       const yMid = PAD + (c.rowStart + (c.rows - 1) / 2) * UY;
       if (multi) el('text', { x: 8, y: yMid, class: 'ar-comp', 'dominant-baseline': 'central' }, eN).textContent = c.name;
       if (c.gapX != null) {
@@ -914,7 +987,10 @@
       if (it.proj) cls += ' proj';
       if (it.inj) cls += ' inj';
       if (it.simple) cls += ' simple';
-      if (it.kind === 'tube') cls += ' regular' + (it.ghost ? ' ghost' : '') + (it.l === 1 ? ' rsimple' : '');
+      if (it.kind === 'tube') cls += ' regular' + (it.l === 1 ? ' rsimple' : '');
+      if (it.ghost) cls += ' ghost';
+      if (it.odd) cls += ' odd';
+      if (it.shiftp) cls += ' shiftp';
       if (it.id === arSel) cls += ' sel';
       else if (nb.has(it.id)) cls += ' nb';
       const g = el('g', { class: cls, transform: 'translate(' + it.X + ',' + it.Y + ')', 'data-ar': it.id }, eN);
@@ -933,7 +1009,7 @@
     svgAR.setAttribute('width', Math.round(W * arScale));
     svgAR.setAttribute('height', Math.round(H * arScale));
 
-    arDrawn = { items: items, links: links, value: value };
+    arDrawn = { items: items, links: links, value: value, src: src, cat: cat };
     renderARInfo();
   }
 
@@ -946,12 +1022,18 @@
     const ar = arDrawn.value.ar, info = arDrawn.value.info;
     if (arSel == null || !items[arSel]) {
       const nReg = items.filter((it) => it.kind === 'tube' && !it.ghost).length;
-      box.textContent = '点击一个模查看详情，同时高亮它的直接前驱与后继。图中共 ' + ar.nodes.length + ' 个预投射 / 预内射模' +
+      const nMain = items.filter((it) => it.kind !== 'tube' && !it.ghost).length;
+      box.textContent = '点击一个对象查看详情，同时高亮它的直接前驱与后继。图中共 ' + nMain + ' 个' +
+        (arDrawn.cat === 'mod' ? (ar.finite ? '不可分解模' : '预投射 / 预内射模') : '对象') +
         (nReg ? '，以及管中的 ' + nReg + ' 个模' : '') + '。';
       return;
     }
     const it = items[arSel];
     const parts = [it.name];
+    if (it.kind === 'der' && it.nd.deg === 0 && it.nd.shiftP < 0) {
+      if (it.nd.proj >= 0 && parts[0] !== 'P' + vlabel(info, it.nd.proj)) parts.push('P' + vlabel(info, it.nd.proj));
+      if (it.nd.inj >= 0) parts.push('I' + vlabel(info, it.nd.inj));
+    }
     if (it.kind === 'ar') {
       const nd = it.nd;
       if ((nd.kind === 'I' || nd.r > 0) && nd.proj >= 0) parts.push('P' + vlabel(info, nd.proj));
@@ -971,6 +1053,18 @@
     code.textContent = '(' + it.dim.join(', ') + ')';
     let where;
     if (it.kind === 'ar') where = '，所在分支 ' + ar.comps[it.nd.comp].name + (it.nd.kind === 'P' ? '（预投射）' : '（预内射）');
+    else if (it.kind === 'der') {
+      const nd = it.nd;
+      if (arDrawn.cat === 'derived') {
+        where = '；K₀ 中的类 (' + nd.cls.join(', ') + ')' + (nd.deg ? '，对象是 M[' + nd.deg + ']，M 为上述维数向量的模' : '，是 mod kQ 中的模');
+      } else if (nd.ghost) {
+        where = '；与 P' + vlabel(info, nd.proj) + ' 是同一个对象：τ⁻¹(P' + vlabel(info, nd.proj) + '[1]) = P' + vlabel(info, nd.proj) + '，这里重复画出以显示绕回';
+      } else if (nd.shiftP >= 0) {
+        where = '；丛范畴中的 P' + vlabel(info, nd.shiftP) + '[1]，对应初始丛变量 x' + vlabel(info, nd.shiftP) + '（括号内为 P' + vlabel(info, nd.shiftP) + ' 的维数向量）';
+      } else {
+        where = '；丛范畴中的不可分解模，对应一个非初始丛变量，其分母向量为 dim M';
+      }
+    }
     else if (it.tube.homog) where = '，正则模，在齐次管中（拟长度 ' + it.l + '，dim = ' + it.l + 'δ；对 ℙ¹ 中例外点之外的每个 λ 各有一个）';
     else where = '，正则模，在例外管 ' + it.tube.index + '（rank ' + it.tube.rank + '）中，拟长度 ' + it.l +
       (it.l === 1 ? '（正则单模）' : '') + (it.l % it.tube.rank === 0 ? '，dim 是 δ 的倍数' : '');
@@ -1403,6 +1497,10 @@
   $('btn-ar').addEventListener('click', openAR);
   ['ar-label', 'ar-tau'].forEach((id) => $(id).addEventListener('change', drawAR));
   $('ar-reg').addEventListener('change', () => { arSel = null; arScale = null; drawAR(); });
+  $('ar-cat').addEventListener('change', () => { arSel = null; arScale = null; drawAR(); });
+  ['ar-dmin', 'ar-dmax'].forEach((id) => $(id).addEventListener('input', () => {
+    if (Number.isFinite(parseInt($(id).value, 10))) { arSel = null; arScale = null; drawAR(); }
+  }));
   $('ar-layers').addEventListener('input', () => {
     if (parseInt($('ar-layers').value, 10) >= 1) { arSel = null; arScale = null; drawAR(); renderARSummary(); }
   });
