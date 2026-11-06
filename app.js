@@ -82,28 +82,87 @@
   }
 
 
-  // ---------------------------------------------------------------- 证明（Proof）面板
+  // ---------------------------------------------------------------- 证明（Proof）面板：LaTeX 排版
+  // 证明以 LaTeX 源码书写：文本中 $…$ 为行内公式，$$…$$ 为行间公式，**…** 为粗体，*…* 为斜体；
+  // 公式由 KaTeX 排版，正文使用 KaTeX_Main（Computer Modern）字体，与标准 LaTeX 文档一致。
   const PROOF_MAX = 80;
   let proofEntries = [];
   const LB = (i) => state.vertices[i].label;
-  const listText = (arr, max) => {
+  const texEsc = (t) => String(t).replace(/′/g, "'").replace(/([#$%&_{}])/g, '\\$1');
+  const T = (i) => texEsc(LB(i));
+  /** 两个下标：都是单个字符时直接相连，否则用逗号隔开 */
+  const sub2 = (a, b) => (a.length === 1 && b.length === 1 ? a + b : a + ',' + b);
+  const bij = (i, j) => 'b_{' + sub2(T(i), T(j)) + '}';
+  const par = (x) => (x < 0 ? '(' + x + ')' : String(x));
+  /** 若干个 TeX 片段（各自已带 $…$）用逗号连接，过多时省略 */
+  const listT = (arr, max) => {
     max = max || 8;
     return arr.length > max ? arr.slice(0, max).join(', ') + ', … (' + arr.length + ' in total)' : arr.join(', ');
   };
-  const arrowText = (i, j, m) => LB(i) + '→' + LB(j) + (m > 1 ? ' (×' + m + ')' : '');
-  const signed = (x) => (x < 0 ? '−' + (-x) : String(x));
-  function fmtVec(v) {
-    if (v.every((x) => x <= 0) && v.some((x) => x < 0)) return '−' + fmtVec(v.map((x) => -x));
-    return v.length <= 12 && v.every((x) => x >= 0 && x < 10) ? v.join('') : '(' + v.map(signed).join(',') + ')';
+  const arrowText = (i, j, m) => '$' + T(i) + '\\to ' + T(j) + (m > 1 ? '\\ (\\times ' + m + ')' : '') + '$';
+  /** 向量的 TeX：(1,1,0)；全为非正时写成 −(…) */
+  function texVec(v) {
+    if (v.every((x) => x <= 0) && v.some((x) => x < 0)) return '-' + texVec(v.map((x) => -x));
+    return '(' + v.join(',') + ')';
+  }
+  /** 底图类型的 TeX：A₃ → A_{3}，D̃₄ → \tilde{D}_{4} */
+  function texType(name) {
+    if (name === 'wild') return '\\text{wild}';
+    const chars = Array.from(name);
+    let letter = chars[0], rest = chars.slice(1), tilde = false;
+    if (letter === 'Ã') { letter = 'A'; tilde = true; }
+    if (letter === 'Ẽ') { letter = 'E'; tilde = true; }
+    if (rest[0] === '̃') { tilde = true; rest = rest.slice(1); }
+    const num = rest.map((c) => '₀₁₂₃₄₅₆₇₈₉'.indexOf(c)).join('');
+    return (tilde ? '\\tilde{' + letter + '}' : letter) + '_{' + num + '}';
   }
 
-  function proof(title, lines) {
-    proofEntries.push({ title: title, lines: (lines || []).filter(Boolean) });
+  /**
+   * 记录一条证明。opts.proof：是否以 “Proof.” 开头；opts.qed：是否以 □ 结尾。
+   */
+  function proof(title, lines, opts) {
+    opts = opts || {};
+    proofEntries.push({ title: title, lines: (lines || []).filter(Boolean), proof: !!opts.proof, qed: !!opts.qed });
     if (proofEntries.length > PROOF_MAX) proofEntries.shift();
     renderProof();
   }
 
-  /** 把证明条目画进一个 <ol> */
+  function renderMath(el, tex, display) {
+    if (window.katex) {
+      try {
+        window.katex.render(tex, el, { displayMode: display, throwOnError: false, output: 'html' });
+        return;
+      } catch (e) { /* 退回纯文本 */ }
+    }
+    el.textContent = tex;
+    el.classList.add('tex-fallback');
+  }
+
+  /** 把一段 LaTeX 风格的源码渲染到 parent 中 */
+  function texToNodes(parent, src) {
+    String(src).split(/(\$\$[\s\S]+?\$\$|\$[^$]+\$)/).forEach((part) => {
+      if (!part) return;
+      if (part.startsWith('$$')) {
+        const d = document.createElement('div');
+        d.className = 'pdisplay';
+        renderMath(d, part.slice(2, -2), true);
+        parent.appendChild(d);
+      } else if (part.startsWith('$')) {
+        const sp = document.createElement('span');
+        renderMath(sp, part.slice(1, -1), false);
+        parent.appendChild(sp);
+      } else {
+        part.split(/(\*\*[^*]+\*\*|\*[^*\s][^*]*\*)/).forEach((t) => {
+          if (!t) return;
+          if (t.startsWith('**')) { const b = document.createElement('b'); b.textContent = t.slice(2, -2); parent.appendChild(b); }
+          else if (t.length > 2 && t.startsWith('*') && t.endsWith('*')) { const i = document.createElement('i'); i.textContent = t.slice(1, -1); parent.appendChild(i); }
+          else parent.appendChild(document.createTextNode(t));
+        });
+      }
+    });
+  }
+
+  /** 把证明条目画进一个 <ol>（amsthm 风格：粗体标题，斜体 Proof.，结尾 □） */
   function renderProofList(list, entries, emptyText) {
     list.textContent = '';
     if (!entries.length) {
@@ -120,13 +179,26 @@
       const num = document.createElement('span');
       num.className = 'pnum';
       num.textContent = (n + 1) + '.';
-      t.append(num, ' ' + e.title);
+      t.appendChild(num);
+      t.appendChild(document.createTextNode(' '));
+      texToNodes(t, e.title);
       li.appendChild(t);
-      e.lines.forEach((l) => {
-        const d = document.createElement('div');
-        d.className = 'pline' + (/^(✓|∎)/.test(l) || / ∎$/.test(l) ? ' ok' : '');
-        d.textContent = l;
-        li.appendChild(d);
+      e.lines.forEach((l, k) => {
+        const para = document.createElement('div');
+        para.className = 'ppara';
+        if (k === 0 && e.proof) {
+          const it = document.createElement('i');
+          it.textContent = 'Proof.';
+          para.append(it, ' ');
+        }
+        texToNodes(para, l);
+        if (k === e.lines.length - 1 && e.qed) {
+          const q = document.createElement('span');
+          q.className = 'qed';
+          renderMath(q, '\\square', false);
+          para.appendChild(q);
+        }
+        li.appendChild(para);
       });
       list.appendChild(li);
     });
@@ -141,47 +213,50 @@
   /** μ_k 的证明：先按三步组合描述，再用矩阵公式逐项核对 */
   function mutationProof(Bold, Bnew, k, fr, stages) {
     const n = Bold.length;
+    const K = T(k);
     const pos = (x) => Math.max(x, 0);
-    const lines = [];
     const paths = [];
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         if (i === k || j === k || i === j) continue;
         const m = pos(Bold[i][k]) * pos(Bold[k][j]);
-        if (m > 0) paths.push(LB(i) + '→' + LB(k) + '→' + LB(j) + (m > 1 ? ' (×' + m + ')' : ''));
+        if (m > 0) paths.push('$' + T(i) + '\\to ' + K + '\\to ' + T(j) + (m > 1 ? '\\ (\\times ' + m + ')' : '') + '$');
       }
     }
-    lines.push('Step 1 (compose): ' + (paths.length ? 'for each path i→' + LB(k) + '→j add an arrow i→j: ' + listText(paths) + '.' : 'there is no path i→' + LB(k) + '→j, so nothing is added.'));
     const inc = [];
     for (let j = 0; j < n; j++) {
       if (Bold[j][k] > 0) inc.push(arrowText(j, k, Bold[j][k]));
       if (Bold[k][j] > 0) inc.push(arrowText(k, j, Bold[k][j]));
     }
-    lines.push('Step 2 (reverse): ' + (inc.length ? 'reverse the arrows at ' + LB(k) + ': ' + listText(inc) + '.' : LB(k) + ' has no arrows.'));
     const st = stages[3];
     const cancel = [], frozenCut = [];
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const m = st.hl[i][j] + st.hl[j][i];
         if (!m) continue;
-        if (fr[i] && fr[j]) frozenCut.push(LB(i) + '–' + LB(j));
-        else cancel.push(LB(i) + '⇄' + LB(j) + (st.hl[i][j] > 1 ? ' (×' + st.hl[i][j] + ')' : ''));
+        if (fr[i] && fr[j]) frozenCut.push('$' + T(i) + '\\text{–}' + T(j) + '$');
+        else cancel.push('$' + T(i) + '\\rightleftarrows ' + T(j) + (st.hl[i][j] > 1 ? '\\ (\\times ' + st.hl[i][j] + ')' : '') + '$');
       }
     }
-    lines.push('Step 3 (cancel): ' + (cancel.length ? 'remove 2-cycles ' + listText(cancel) : 'no 2-cycles') +
-      (frozenCut.length ? '; drop arrows between frozen vertices ' + listText(frozenCut) : '') + '.');
-    const checks = [];
+    const rows = [];
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         if (i === k || j === k || Bnew[i][j] === Bold[i][j]) continue;
         const bik = Bold[i][k], bkj = Bold[k][j];
-        if (fr[i] && fr[j]) { checks.push('b′[' + LB(i) + ',' + LB(j) + '] = 0 (both frozen)'); continue; }
-        checks.push('b′[' + LB(i) + ',' + LB(j) + '] = ' + signed(Bold[i][j]) + ' + (|' + signed(bik) + '|·' + signed(bkj) + ' + ' + signed(bik) + '·|' + signed(bkj) + '|)/2 = ' + signed(Bnew[i][j]));
+        if (fr[i] && fr[j]) { rows.push("b'_{" + sub2(T(i), T(j)) + '} &= 0 \\quad\\text{(both frozen)}'); continue; }
+        rows.push("b'_{" + sub2(T(i), T(j)) + '} &= ' + Bold[i][j] + ' + \\tfrac12\\bigl(|' + bik + '|\\cdot ' + par(bkj) + ' + ' + par(bik) + '\\cdot|' + bkj + '|\\bigr) = ' + Bnew[i][j]);
       }
     }
-    lines.push('Matrix check: b′[i,' + LB(k) + '] = −b[i,' + LB(k) + '] for all i; ' + (checks.length ? listText(checks, 6) : 'no other entry changes') + '.');
-    lines.push('Both descriptions give the same skew-symmetric matrix, which is the quiver drawn. ∎');
-    return lines;
+    const shown = rows.slice(0, 6);
+    return [
+      '**Step 1** (compose). ' + (paths.length ? 'For each path $i\\to ' + K + '\\to j$ add an arrow $i\\to j$: ' + listT(paths) + '.' : 'There is no path $i\\to ' + K + '\\to j$, so no arrow is added.'),
+      '**Step 2** (reverse). ' + (inc.length ? 'Reverse the arrows incident to $' + K + '$: ' + listT(inc) + '.' : 'There are no arrows at $' + K + '$.'),
+      '**Step 3** (cancel). ' + (cancel.length ? 'Remove the 2-cycles ' + listT(cancel) : 'There are no 2-cycles') +
+        (frozenCut.length ? ', and the arrows between frozen vertices ' + listT(frozenCut) : '') + '.',
+      '**Matrix check.** By the Fomin–Zelevinsky formula $$\\begin{aligned} b\'_{' + sub2('i', K) + '} &= -b_{' + sub2('i', K) + '},\\\\ b\'_{ij} &= b_{ij} + \\tfrac12\\bigl(|b_{' + sub2('i', K) + '}|\\,b_{' + sub2(K, 'j') + '} + b_{' + sub2('i', K) + '}\\,|b_{' + sub2(K, 'j') + '}|\\bigr) \\quad (i,j\\neq ' + K + ').\\end{aligned}$$',
+      shown.length ? 'The entries that change are $$\\begin{aligned}' + shown.join('\\\\ ') + '\\end{aligned}$$' + (rows.length > 6 ? ' and ' + (rows.length - 6) + ' more.' : '') : 'Apart from row and column $' + K + '$, no entry changes.',
+      'Both descriptions give the same skew-symmetric matrix, which is the quiver shown.'
+    ];
   }
 
   /** 示例 / 导入的箭头列表 */
@@ -211,7 +286,7 @@
     redoStack.push(snapshot());
     restore(undoStack.pop());
     render();
-    proof('Undo', ['Restored the previous state; B is back to the matrix before the last step.']);
+    proof('Undo', ['Restored the previous state; $B$ is again the matrix from before the last step.']);
   }
   function redo() {
     if (!redoStack.length) return;
@@ -245,9 +320,9 @@
     selected = v.id;
     render();
     const n = state.vertices.length;
-    proof('Add ' + (v.frozen ? 'frozen' : 'mutable') + ' vertex ' + v.label, [
-      'B gets a new zero row and column, so it is now ' + n + '×' + n + '.',
-      v.frozen ? 'Frozen: it can never be mutated, and arrows to other frozen vertices are not allowed.' : 'Mutable: μ' + v.label + ' can be applied to it.'
+    proof('Add a ' + (v.frozen ? 'frozen' : 'mutable') + ' vertex $' + texEsc(v.label) + '$', [
+      'The exchange matrix gains a zero row and a zero column, so now $B \\in M_{' + n + '}(\\mathbb{Z})$.',
+      v.frozen ? 'The vertex is frozen: it is never mutated, and an ice quiver has no arrows between frozen vertices.' : 'The vertex is mutable, so $\\mu_{' + texEsc(v.label) + '}$ may be applied.'
     ]);
   }
 
@@ -268,9 +343,9 @@
     removeVertexAt(i);
     if (selected === id) selected = null;
     render();
-    proof('Delete vertex ' + label, [
-      'Remove row and column ' + label + ' of B' + (gone.length ? ', together with the arrows ' + listText(gone) : '') + '.',
-      'The rest of B is unchanged, so it is still skew-symmetric.'
+    proof('Delete vertex $' + texEsc(label) + '$', [
+      'Delete row and column $' + texEsc(label) + '$ of $B$' + (gone.length ? ', together with the arrows ' + listT(gone) : '') + '.',
+      'What remains is a principal submatrix of $B$, hence still skew-symmetric.'
     ]);
   }
 
@@ -288,10 +363,10 @@
     if (state.B[i][j] <= 0) toast('Cancelled against an arrow in the opposite direction (quivers have no 2-cycles).');
     render();
     const now = state.B[i][j];
-    proof('Draw arrow ' + LB(i) + ' → ' + LB(j), [
-      'b[' + LB(i) + ',' + LB(j) + '] = ' + signed(before) + ' + 1 = ' + signed(now) + ', and b[' + LB(j) + ',' + LB(i) + '] = ' + signed(-now || 0) + ' by skew-symmetry.',
-      now > 0 ? 'So there ' + (now === 1 ? 'is 1 arrow ' : 'are ' + now + ' arrows ') + LB(i) + ' → ' + LB(j) + '.'
-        : 'It cancels one arrow ' + LB(j) + ' → ' + LB(i) + ' (a quiver has no 2-cycles); ' + (now === 0 ? 'no arrows remain between them.' : (-now) + ' arrow(s) ' + LB(j) + ' → ' + LB(i) + ' remain.')
+    proof('Draw an arrow $' + T(i) + '\\to ' + T(j) + '$', [
+      '$' + bij(i, j) + ' = ' + before + ' + 1 = ' + now + '$, and by skew-symmetry $' + bij(j, i) + ' = -' + bij(i, j) + ' = ' + (-now || 0) + '$.',
+      now > 0 ? 'Hence there ' + (now === 1 ? 'is one arrow' : 'are $' + now + '$ arrows') + ' $' + T(i) + '\\to ' + T(j) + '$.'
+        : 'The new arrow cancels an arrow $' + T(j) + '\\to ' + T(i) + '$, since a quiver has no 2-cycles; ' + (now === 0 ? 'no arrows remain between them.' : '$' + (-now) + '$ arrow(s) $' + T(j) + '\\to ' + T(i) + '$ remain.')
     ]);
   }
 
@@ -302,8 +377,8 @@
     state.B[i][j] -= 1;
     state.B[j][i] += 1;
     render();
-    proof('Delete arrow ' + LB(i) + ' → ' + LB(j), [
-      'b[' + LB(i) + ',' + LB(j) + '] = ' + signed(state.B[i][j] + 1) + ' − 1 = ' + signed(state.B[i][j]) + ', b[' + LB(j) + ',' + LB(i) + '] = ' + signed(state.B[j][i]) + '.'
+    proof('Delete an arrow $' + T(i) + '\\to ' + T(j) + '$', [
+      '$' + bij(i, j) + ' = ' + (state.B[i][j] + 1) + ' - 1 = ' + state.B[i][j] + '$ and $' + bij(j, i) + ' = ' + state.B[j][i] + '$.'
     ]);
   }
 
@@ -324,14 +399,14 @@
       });
       if (removed) toast('Removed ' + removed + ' arrow(s) between frozen vertices.');
       render();
-      proof('Freeze vertex ' + LB(i), [
-        'A frozen vertex is never mutated; its row stays in B̃ but its column is dropped.',
-        removed ? 'Arrows between frozen vertices are ignored in an ice quiver, so ' + removed + ' arrow(s) were removed.' : 'It had no arrows to other frozen vertices, so B is unchanged.'
+      proof('Freeze vertex $' + T(i) + '$', [
+        'A frozen vertex is never mutated: its row stays in $\\tilde B$, but its column is dropped.',
+        removed ? 'An ice quiver has no arrows between frozen vertices, so $' + removed + '$ arrow(s) were removed.' : 'It had no arrows to other frozen vertices, so $B$ is unchanged.'
       ]);
       return;
     }
     render();
-    proof('Unfreeze vertex ' + LB(i), ['It becomes mutable: its column is added to B̃ and μ' + LB(i) + ' is allowed.']);
+    proof('Unfreeze vertex $' + T(i) + '$', ['The vertex becomes mutable: its column is added to $\\tilde B$ and $\\mu_{' + T(i) + '}$ is allowed.']);
   }
 
   function setEntry(i, j, v) {
@@ -345,9 +420,9 @@
     state.B[i][j] = v;
     state.B[j][i] = -v || 0;
     render();
-    proof('Edit entry b[' + LB(i) + ',' + LB(j) + ']', [
-      'b[' + LB(i) + ',' + LB(j) + ']: ' + signed(old) + ' → ' + signed(v) + ', and b[' + LB(j) + ',' + LB(i) + '] = ' + signed(-v || 0) + ' by skew-symmetry.',
-      v > 0 ? 'So there are ' + v + ' arrow(s) ' + LB(i) + ' → ' + LB(j) + '.' : v < 0 ? 'So there are ' + (-v) + ' arrow(s) ' + LB(j) + ' → ' + LB(i) + '.' : 'So there are no arrows between them.'
+    proof('Edit the entry $' + bij(i, j) + '$', [
+      '$' + bij(i, j) + '$ changes from $' + old + '$ to $' + v + '$, and by skew-symmetry $' + bij(j, i) + ' = ' + (-v || 0) + '$.',
+      v > 0 ? 'Hence there are $' + v + '$ arrow(s) $' + T(i) + '\\to ' + T(j) + '$.' : v < 0 ? 'Hence there are $' + (-v) + '$ arrow(s) $' + T(j) + '\\to ' + T(i) + '$.' : 'Hence there are no arrows between them.'
     ]);
   }
 
@@ -362,7 +437,7 @@
     pushUndo();
     v.label = label;
     render();
-    proof('Rename vertex ' + old + ' → ' + label, ['Only the name changes; B is unchanged.']);
+    proof('Rename vertex $' + texEsc(old) + '$ to $' + texEsc(label) + '$', ['Only the name changes; $B$ is unchanged.']);
   }
 
   // ---------------------------------------------------------------- 变异
@@ -373,7 +448,7 @@
     const Bold = state.B;
     state.B = Q.mutate(state.B, i, fr);
     state.seq.push(state.vertices[i].id);
-    proof('Mutation μ' + LB(i), mutationProof(Bold, state.B, i, fr, stages));
+    proof('Mutation $\\mu_{' + T(i) + '}$', mutationProof(Bold, state.B, i, fr, stages), { proof: true, qed: true });
     return stages;
   }
 
@@ -424,16 +499,16 @@
     if (!state.seed) { toast('No mutations have been applied yet.'); return; }
     stopDemo();
     pushUndo();
-    const seqLabels = state.seq.map((id) => { const v = byId(id); return v ? 'μ' + v.label : '?'; });
+    const seqLabels = state.seq.map((id) => { const v = byId(id); return '\\mu_{' + (v ? texEsc(v.label) : '?') + '}'; });
     state.B = JSON.parse(state.seed);
     state.seq = [];
     state.seed = null;
     render();
     toast('Back to the initial seed.');
     proof('Back to the initial seed', [
-      'Restored B from before ' + seqLabels.join(' ∘ ') + '.',
-      'Equivalently, apply the mutations in reverse order: each μₖ is an involution, so ' + seqLabels.slice().reverse().join(', ') + ' undoes them.'
-    ]);
+      'Restored $B$ from before $' + seqLabels.slice().reverse().join('\\circ ') + '$.',
+      'Since each $\\mu_k$ is an involution, this is the same as applying $' + seqLabels.join('\\circ ') + '$ to the current seed.'
+    ], { proof: false });
   }
 
   function stopDemo() {
@@ -477,8 +552,8 @@
     render();
     toast(sign > 0 ? 'Added principal coefficients: i → i′.' : 'Added coprincipal coefficients: i′ → i.');
     proof(sign > 0 ? 'Add principal coefficients' : 'Add coprincipal coefficients', [
-      'For each of the ' + mutable.length + ' mutable vertices i, add a frozen vertex i′ with one arrow ' + (sign > 0 ? 'i → i′' : 'i′ → i') + '.',
-      'So the frozen block of B̃ is ' + (sign > 0 ? '−I' : '+I') + ' (rows i′, columns i)' + (sign > 0 ? '; after mutations its columns, up to sign, are the c-vectors.' : '.')
+      'For each of the $' + mutable.length + '$ mutable vertices $i$, add a frozen vertex $i\'$ and an arrow $' + (sign > 0 ? "i\\to i'" : "i'\\to i") + '$.',
+      'Thus the coefficient block of $\\tilde B$ (rows $i\'$, columns $i$) is $' + (sign > 0 ? '-I' : 'I') + '$' + (sign > 0 ? '; after mutations its columns are, up to sign, the $c$-vectors.' : '.')
     ]);
   }
 
@@ -489,14 +564,14 @@
     const cnt = state.vertices.filter((v) => v.frozen).length;
     state.vertices.forEach((v) => { v.frozen = false; });
     render();
-    proof('Unfreeze all', [cnt + ' frozen vertices become mutable; B is unchanged, and B̃ is now the full matrix.']);
+    proof('Unfreeze all', ['$' + cnt + '$ frozen vertices become mutable; $B$ is unchanged and $\\tilde B$ is now the full matrix.']);
   }
 
   function removeFrozen() {
     if (!state.vertices.some((v) => v.frozen)) { toast('There are no frozen vertices.'); return; }
     pushUndo();
     structural();
-    proof('Remove frozen vertices', ['Delete the rows and columns of ' + listText(state.vertices.filter((v) => v.frozen).map((v) => v.label)) + '; what remains is the principal part B of B̃.']);
+    proof('Remove frozen vertices', ['Delete the rows and columns of ' + listT(state.vertices.filter((v) => v.frozen).map((v) => '$' + texEsc(v.label) + '$')) + '; what remains is the principal part $B$ of $\\tilde B$.']);
     for (let i = state.vertices.length - 1; i >= 0; i--) {
       if (state.vertices[i].frozen) {
         if (state.vertices[i].id === selected) selected = null;
@@ -553,7 +628,7 @@
     selected = null;
     stopDemo();
     render();
-    proof('Clear', ['The quiver is empty and B is the 0×0 matrix.']);
+    proof('Clear', ['The quiver is empty, and $B$ is the $0\\times 0$ matrix.']);
   }
 
   // ---------------------------------------------------------------- 示例
@@ -646,8 +721,8 @@
     const arr = arrowList();
     const fz = state.vertices.filter((v) => v.frozen).map((v) => v.label);
     proof('Load example ' + (opt ? opt.textContent : name), [
-      state.vertices.length + ' vertices' + (fz.length ? ' (frozen: ' + listText(fz) + ')' : '') + '; arrows: ' + (arr.length ? listText(arr, 10) : 'none') + '.',
-      'B is the skew-symmetric matrix with b[i,j] = #(i→j) − #(j→i).'
+      '$' + state.vertices.length + '$ vertices' + (fz.length ? ' (frozen: ' + listT(fz.map((l) => '$' + texEsc(l) + '$')) + ')' : '') + '; arrows: ' + (arr.length ? listT(arr, 10) : 'none') + '.',
+      '$B$ is the skew-symmetric matrix with $b_{ij} = \\#\\{i\\to j\\} - \\#\\{j\\to i\\}$.'
     ]);
   }
 
@@ -704,27 +779,32 @@
     const info = computePA();
     const a = info.verts.indexOf(idx(id));
     if (a < 0) return;
-    const label = byId(id).label;
-    const name = kind + '(' + label + ')';
+    const L = texEsc(byId(id).label);
+    const name = kind + '(' + L + ')';
     const dims = moduleDims(info, kind, a);
-    const vec = dims.map(fmt).join(', ');
+    const vec = '(' + dims.map((x) => (x === null ? '\\infty' : x.toString())).join(',') + ')';
+    const title = 'Dimension vector of $' + name + '$';
     if (kind === 'S') {
-      proof('Dimension vector of ' + name, ['S(' + label + ') is k at ' + label + ' and 0 elsewhere, with all arrows acting by 0: dim = (' + vec + ').']);
+      proof(title, ['$S(' + L + ')$ is $k$ at $' + L + '$ and $0$ elsewhere, and every arrow acts by $0$; hence $\\underline{\\dim}\\,S(' + L + ') = ' + vec + '$.'], { proof: true, qed: true });
       return;
     }
     const isP = kind === 'P';
-    const lines = [isP ? 'P(' + label + ')_j has a basis of the paths from ' + label + ' to j, so its entry at j is Σ_l (A^l)[' + label + ',j].'
-      : 'I(' + label + ')_j has a basis of the paths from j to ' + label + ', so its entry at j is Σ_l (A^l)[j,' + label + '].'];
+    const lines = [isP
+      ? '$P(' + L + ')_j$ has a basis consisting of the paths from $' + L + '$ to $j$, so $$\\underline{\\dim}\\,P(' + L + ')_j = \\sum_{\\ell\\ge 0}(A^\\ell)_{' + sub2(L, 'j') + '}.$$'
+      : '$I(' + L + ')_j$ has a basis consisting of the paths from $j$ to $' + L + '$, so $$\\underline{\\dim}\\,I(' + L + ')_j = \\sum_{\\ell\\ge 0}(A^\\ell)_{' + sub2('j', L) + '}.$$'];
     const ls = Q.layers(info.pa, a, kind).filter((v) => v.some((x) => x > 0n));
-    ls.slice(0, 8).forEach((vec2, l) => {
-      lines.push('length ' + l + ': ' + layerText(vec2, info) + (l === 0 ? (isP ? '  (endpoints of paths from ' + label + ')' : '  (starting points of paths to ' + label + ')') : ''));
-    });
-    if (ls.length > 8) lines.push('… (more lengths)');
-    if (dims.some((x) => x === null)) lines.push('Some paths run through an oriented cycle, so there are infinitely many of them: those entries are ∞.');
-    else if (!info.pa.finite) lines.push('No path from here reaches an oriented cycle, so all entries are finite.');
-    else if (info.opts.trunc) lines.push('Paths of length ≥ ' + info.opts.L + ' are zero in kQ/R^' + info.opts.L + '.');
-    lines.push('Adding the layers: dim ' + name + ' = (' + vec + '), total ' + fmt(Q.totalDim(dims)) + '. ∎');
-    proof('Dimension vector of ' + name, lines);
+    const layerTex = (v) => {
+      const parts = [];
+      v.forEach((m, j) => { if (m > 0n) parts.push('S_{' + texEsc(state.vertices[info.verts[j]].label) + '}' + (m > 1n ? '^{' + m + '}' : '')); });
+      return parts.join('\\oplus ');
+    };
+    const rows = ls.slice(0, 8).map((v, l) => '\\ell = ' + l + '&:\\ ' + layerTex(v));
+    lines.push((isP ? 'Grouping the paths by length $\\ell$ (these are the radical layers):' : 'Grouping the paths by length $\\ell$ (these are the socle layers):') +
+      ' $$\\begin{aligned}' + rows.join('\\\\ ') + '\\end{aligned}$$' + (ls.length > 8 ? ' and further layers.' : ''));
+    if (dims.some((x) => x === null)) lines.push('Some of these paths run through an oriented cycle, so there are infinitely many of them and the corresponding entries are $\\infty$.');
+    else if (info.opts.trunc) lines.push('In $kQ/R^{' + info.opts.L + '}$ all paths of length $\\ge ' + info.opts.L + '$ vanish.');
+    lines.push('Adding up the layers, $\\underline{\\dim}\\,' + name + ' = ' + vec + '$, of total dimension $' + (Q.totalDim(dims) === null ? '\\infty' : Q.totalDim(dims).toString()) + '$.');
+    proof(title, lines, { proof: true, qed: true });
   }
 
   function renderPathAlgebra() {
@@ -847,6 +927,12 @@
     const l = vlabel(info, nd.i);
     if (nd.kind === 'P') return nd.r === 0 ? 'P' + l : 'τ⁻' + sup(nd.r) + 'P' + l;
     return nd.r === 0 ? 'I' + l : 'τ' + (nd.r === 1 ? '' : sup(nd.r)) + 'I' + l;
+  }
+
+  function texNodeName(nd, info) {
+    const l = texEsc(vlabel(info, nd.i));
+    if (nd.kind === 'P') return nd.r === 0 ? 'P_{' + l + '}' : '\\tau^{-' + nd.r + '}P_{' + l + '}';
+    return nd.r === 0 ? 'I_{' + l + '}' : '\\tau' + (nd.r === 1 ? '' : '^{' + nd.r + '}') + 'I_{' + l + '}';
   }
 
   function dimLabel(dim) {
@@ -1007,26 +1093,32 @@
     const showReg = hasEuclid && $('ar-reg').checked;
     const L = arLayers();
     const modNames = new Map();
-    ar.nodes.forEach((nd) => { const k = nd.dim.join(','); if (!modNames.has(k)) modNames.set(k, arNodeName(nd, info)); });
+    const modTex = new Map();
+    ar.nodes.forEach((nd) => {
+      const k = nd.dim.join(',');
+      if (!modNames.has(k)) { modNames.set(k, arNodeName(nd, info)); modTex.set(k, texNodeName(nd, info)); }
+    });
     const derItem = (nd) => {
-      let name, dimText;
+      let name, dimText, tex;
       if (nd.shiftP >= 0) {
         name = dimText = 'P' + vlabel(info, nd.shiftP) + '[1]';
+        tex = 'P_{' + texEsc(vlabel(info, nd.shiftP)) + '}[1]';
       } else {
         const suf = nd.deg ? '[' + nd.deg + ']' : '';
         name = (modNames.get(nd.dim.join(',')) || '(' + nd.dim.join(',') + ')') + suf;
+        tex = (modTex.get(nd.dim.join(',')) || texVec(nd.dim)) + suf;
         dimText = dimLabel(nd.dim) + suf;
       }
       const plain = nd.deg === 0 && nd.shiftP < 0;
       return {
-        id: nd.id, kind: 'der', nd: nd, dim: nd.dim, name: name, dimText: dimText,
+        id: nd.id, kind: 'der', nd: nd, dim: nd.dim, name: name, dimText: dimText, tex: tex,
         proj: plain && nd.proj >= 0, inj: plain && nd.inj >= 0, simple: plain && nd.simple,
         ghost: nd.ghost, odd: nd.deg % 2 !== 0, shiftp: nd.shiftP >= 0
       };
     };
     const items = D ? D.nodes.map(derItem) : ar.nodes.map((nd) => ({
       id: nd.id, kind: 'ar', nd: nd, dim: nd.dim,
-      name: arNodeName(nd, info),
+      name: arNodeName(nd, info), tex: texNodeName(nd, info),
       proj: nd.proj >= 0, inj: nd.inj >= 0, simple: nd.simple
     }));
     const links = src.edges.map((e) => ({ from: e.from, to: e.to, mult: e.mult, curve: Math.abs(src.nodes[e.from].row - src.nodes[e.to].row) >= 2 }));
@@ -1049,6 +1141,7 @@
               const it = {
                 id: items.length, kind: 'tube', dim: dim, tube: tube, k: k, l: l, tx: x, ghost: x === 2 * r, comp: ci,
                 name: tube.homog ? 'Mλ[' + l + ']' : 'E' + (k + 1) + '[' + l + ']',
+                tex: tube.homog ? 'M_\\lambda[' + l + ']' : 'E_{' + (k + 1) + '}[' + l + ']',
                 proj: false, inj: false, simple: dim.reduce((a, b) => a + b, 0) === 1
               };
               items.push(it);
@@ -1215,11 +1308,11 @@
 
   let arDrawn = null;
 
-  // ---- AR 箭图的证明
+  // ---- AR 箭图的证明（LaTeX）
   const KIND_REASON = {
-    dynkin: 'a Dynkin diagram, so kQ is representation-finite (Gabriel’s theorem)',
-    euclidean: 'a Euclidean (extended Dynkin) diagram, so kQ is tame and representation-infinite',
-    wild: 'neither Dynkin nor Euclidean, so kQ is wild'
+    dynkin: 'a Dynkin diagram; hence $kQ$ is representation-finite by Gabriel’s theorem',
+    euclidean: 'a Euclidean (extended Dynkin) diagram; hence $kQ$ is tame and representation-infinite',
+    wild: 'neither Dynkin nor Euclidean; hence $kQ$ is wild'
   };
 
   function arProofEntries() {
@@ -1227,27 +1320,39 @@
     const entries = [];
     const ar = d.value.ar, info = d.value.info, src = d.src, cat = d.cat, items = d.items, links = d.links;
     const n = info.verts.length;
-    const lab = (a) => vlabel(info, a);
+    const lab = (a) => texEsc(vlabel(info, a));
     const vecOf = (it) => (it.kind === 'der' && cat === 'derived' ? it.nd.cls : it.dim);
+    const types = src.comps.map((c) => '$' + texType(c.name) + '$').join(' and ');
     entries.push({
-      title: 'Classify the underlying graph',
-      lines: src.comps.map((c) => c.name + ' on {' + c.verts.map(lab).join(', ') + '}: ' + KIND_REASON[c.kind] + '.')
+      title: '**Lemma.** Type of $Q$',
+      lines: src.comps.map((c) => 'The underlying graph on $\\{' + c.verts.map(lab).join(',') + '\\}$ is of type $' + texType(c.name) + '$, ' + KIND_REASON[c.kind] + '.'),
+      proof: false, qed: false
     });
+    const listVecs = (letter, vs) => vs.map((v, i) => '$' + letter + '_{' + lab(i) + '} = ' + texVec(v) + '$').join(', ');
     entries.push({
-      title: 'Projectives and injectives',
+      title: '**Lemma.** Projective and injective modules',
       lines: [
-        'dim P(i) = e_i + Σ_{i→j} dim P(j), since rad P(i) = ⊕_{i→j} P(j):',
-        '  ' + src.P.map((v, i) => 'P' + lab(i) + ' = ' + fmtVec(v)).join(',  '),
-        'dim I(i) = e_i + Σ_{k→i} dim I(k), since I(i)/soc = ⊕_{k→i} I(k):',
-        '  ' + src.I.map((v, i) => 'I' + lab(i) + ' = ' + fmtVec(v)).join(',  ')
-      ]
+        'Since $\\operatorname{rad}P(i) = \\bigoplus_{i\\to j}P(j)$ and $I(i)/\\operatorname{soc}I(i) = \\bigoplus_{k\\to i}I(k)$, $$\\underline{\\dim}\\,P(i) = e_i + \\sum_{i\\to j}\\underline{\\dim}\\,P(j),\\qquad \\underline{\\dim}\\,I(i) = e_i + \\sum_{k\\to i}\\underline{\\dim}\\,I(k).$$',
+        'Solving these recursions along $Q$: ' + listVecs('P', src.P) + '; and ' + listVecs('I', src.I) + '.'
+      ],
+      proof: true, qed: true
     });
 
     const add = (a, b) => a.map((x, t) => x + b[t]);
     const scale = (m, v) => v.map((x) => m * x);
     const same = (a, b) => a.length === b.length && a.every((x, t) => x === b[t]);
-    const term = (e, id) => (e.mult > 1 ? e.mult + '·' : '') + items[id].name;
-    const termV = (e, id) => (e.mult > 1 ? e.mult + '·' : '') + fmtVec(vecOf(items[id]));
+    // 带符号的数值表达式
+    const expr = (terms) => {
+      let out = '';
+      terms.forEach(([sign, m, v], t) => {
+        const neg = v.every((x) => x <= 0) && v.some((x) => x < 0);
+        const sg = neg ? -sign : sign;
+        const body = (m > 1 ? m + '\\cdot ' : '') + texVec(neg ? v.map((x) => -x) : v);
+        out += t === 0 ? (sg < 0 ? '-' + body : body) : (sg < 0 ? ' - ' : ' + ') + body;
+      });
+      return out || '0';
+    };
+    const nameSum = (terms) => terms.map(([m, it]) => (m > 1 ? m + '\\,' : '') + it.tex).join(' + ') || '0';
 
     if (cat !== 'cluster') {
       const fwd = [], bwd = [];
@@ -1260,40 +1365,27 @@
       fwd.sort((a, b) => a.X.nd.r - b.X.nd.r || a.X.id - b.X.id);
       bwd.sort((a, b) => b.TX.nd.r - a.TX.nd.r || a.TX.id - b.TX.id);
       const lines = [cat === 'derived'
-        ? 'An AR triangle τX → E → X → τX[1] gives [X] + [τX] = [E] in K₀; the class of M[d] is (−1)^d·dim M.'
-        : 'An AR sequence 0 → τX → E → X → 0 gives dim X + dim τX = dim E, where E is the sum of the middle terms of the mesh.'];
-      // 带符号的数值表达式：负的类写成减去它的绝对值
-      const expr = (terms) => {
-        let out = '';
-        terms.forEach(([sign, m, v], t) => {
-          const neg = v.every((x) => x <= 0) && v.some((x) => x < 0);
-          const sg = neg ? -sign : sign;
-          const body = (m > 1 ? m + '·' : '') + fmtVec(neg ? v.map((x) => -x) : v);
-          out += t === 0 ? (sg < 0 ? '−' + body : body) : (sg < 0 ? ' − ' : ' + ') + body;
-        });
-        return out || '0';
-      };
-      const knit = (target, known, mids, forward) => {
+        ? 'An Auslander–Reiten triangle $\\tau X\\to E\\to X\\to \\tau X[1]$ gives $[X] + [\\tau X] = [E]$ in $K_0$, where $[M[d]] = (-1)^d\\,\\underline{\\dim}\\,M$. Starting from the projectives and knitting in both directions:'
+        : 'An almost split sequence $0\\to\\tau X\\to E\\to X\\to 0$ gives $\\underline{\\dim}\\,X + \\underline{\\dim}\\,\\tau X = \\underline{\\dim}\\,E$, where $E$ is the sum of the middle terms of the mesh. Identifying each module with its dimension vector and starting from the projectives:'];
+      const knit = (target, known, mids) => {
         let sum = vecOf(known).map((x) => -x);
-        mids.forEach((e) => { sum = add(sum, scale(e.mult, vecOf(items[forward ? e.to : e.from]))); });
+        mids.forEach(([m, it]) => { sum = add(sum, scale(m, vecOf(it))); });
         const ok = same(sum, vecOf(target));
-        const names = mids.map((e) => term(e, forward ? e.to : e.from)).join(' + ') || '0';
-        const vals = expr(mids.map((e) => [1, e.mult, vecOf(items[forward ? e.to : e.from])]).concat([[-1, 1, vecOf(known)]]));
-        return target.name + ' = ' + names + ' − ' + known.name +
-          (ok ? ' = ' + vals + ' = ' + fmtVec(vecOf(target)) : '  (some middle terms lie outside the shown range) = ' + fmtVec(vecOf(target)));
+        const vals = expr(mids.map(([m, it]) => [1, m, vecOf(it)]).concat([[-1, 1, vecOf(known)]]));
+        return '$' + target.tex + ' = ' + nameSum(mids) + ' - ' + known.tex + (ok ? ' = ' + vals : '') + ' = ' + texVec(vecOf(target)) + '$' +
+          (ok ? '' : ' (some middle terms lie outside the range shown).');
       };
-      // 按依赖顺序输出：一步用到的对象若也是编织出来的，先输出它
       const emitInOrder = (pairs, forward) => {
         const targetOf = (pr) => (forward ? pr.X : pr.TX);
-        const midsOf = (pr) => (forward ? links.filter((e) => e.from === pr.TX.id).map((e) => e.to) : links.filter((e) => e.to === pr.X.id).map((e) => e.from));
+        const midsOf = (pr) => (forward ? links.filter((e) => e.from === pr.TX.id).map((e) => [e.mult, items[e.to]])
+          : links.filter((e) => e.to === pr.X.id).map((e) => [e.mult, items[e.from]]));
         const pending = new Set(pairs.map((pr) => targetOf(pr).id));
         let rest = pairs.slice();
         while (rest.length) {
-          const ready = rest.filter((pr) => midsOf(pr).every((id) => !pending.has(id) || id === targetOf(pr).id));
+          const ready = rest.filter((pr) => midsOf(pr).every(([, it]) => !pending.has(it.id) || it.id === targetOf(pr).id));
           const batch = ready.length ? ready : [rest[0]];
           batch.forEach((pr) => {
-            lines.push(forward ? knit(pr.X, pr.TX, links.filter((e) => e.from === pr.TX.id), true)
-              : knit(pr.TX, pr.X, links.filter((e) => e.to === pr.X.id), false));
+            lines.push(forward ? knit(pr.X, pr.TX, midsOf(pr)) : knit(pr.TX, pr.X, midsOf(pr)));
             pending.delete(targetOf(pr).id);
           });
           rest = rest.filter((pr) => batch.indexOf(pr) < 0);
@@ -1301,71 +1393,83 @@
       };
       emitInOrder(fwd, true);
       emitInOrder(bwd, false);
-      if (lines.length > 401) lines.splice(401, lines.length - 401, '… (' + (fwd.length + bwd.length) + ' steps in total)');
+      if (lines.length > 401) lines.splice(401, lines.length - 401, 'and so on (' + (fwd.length + bwd.length) + ' steps in total).');
       entries.push({
-        title: fwd.length || bwd.length ? 'Knit the mesh relations' : 'Knitting',
-        lines: fwd.length || bwd.length ? lines : ['Every P(i) is injective, so there is nothing to knit.']
+        title: '**Construction.** Knitting the meshes',
+        lines: fwd.length || bwd.length ? lines : ['Every $P(i)$ is injective, so there is nothing to knit.'],
+        proof: false, qed: false
       });
 
       const stops = [];
       if (cat === 'mod') {
         items.forEach((it) => {
           if (it.kind !== 'ar') return;
-          if (it.nd.kind === 'P' && it.nd.inj >= 0) stops.push(it.name + ' ≅ I' + lab(it.nd.inj) + ' is injective, so τ⁻¹ of it is not a module: the orbit of ' + lab(it.nd.i) + ' stops.');
-          if (it.nd.kind === 'I' && it.nd.proj >= 0) stops.push(it.name + ' ≅ P' + lab(it.nd.proj) + ' is projective, so τ of it is not a module: the orbit stops.');
+          if (it.nd.kind === 'P' && it.nd.inj >= 0) stops.push('$' + it.tex + '\\cong I_{' + lab(it.nd.inj) + '}$ is injective, so $\\tau^{-1}$ of it is not a module and the $\\tau$-orbit of $' + lab(it.nd.i) + '$ stops.');
+          if (it.nd.kind === 'I' && it.nd.proj >= 0) stops.push('$' + it.tex + '\\cong P_{' + lab(it.nd.proj) + '}$ is projective, so the $\\tau$-orbit stops.');
         });
       } else {
         src.tau.forEach((t) => {
           const X = items[t.from], TX = items[t.to];
           if (X && TX && X.nd.deg !== TX.nd.deg) {
-            stops.push(X.name + ': its class ' + fmtVec(X.nd.cls) + ' has the opposite sign to that of ' + TX.name + ', so the shift degree changes from [' + TX.nd.deg + '] to [' + X.nd.deg + '].');
+            stops.push('The class $[' + X.tex + '] = ' + texVec(X.nd.cls) + '$ has the opposite sign to $[' + TX.tex + ']$, so the shift changes from $[' + TX.nd.deg + ']$ to $[' + X.nd.deg + ']$.');
           }
         });
       }
-      if (stops.length) entries.push({ title: cat === 'mod' ? 'Where the τ-orbits stop' : 'Where the shift changes (τ⁻¹I(j) = P(j)[1])', lines: stops });
+      if (stops.length) {
+        entries.push({
+          title: cat === 'mod' ? '**Lemma.** The $\\tau$-orbits' : '**Lemma.** The shifts ($\\tau^{-1}I(j) = P(j)[1]$)',
+          lines: stops, proof: false, qed: false
+        });
+      }
 
       const dyn = src.comps.every((c) => c.kind === 'dynkin');
       const main = items.filter((it) => it.kind !== 'tube');
       if (cat === 'mod') {
+        const roots = src.comps.map((c) => c.count).join(' + ');
         entries.push({
-          title: 'Conclusion',
+          title: '**Theorem.** The Auslander–Reiten quiver of $kQ$',
           lines: dyn
-            ? ['Every τ⁻¹-orbit ends at an injective, so the preprojective component is finite and contains every indecomposable.',
-               ar.total + ' indecomposable modules = number of positive roots of ' + src.comps.map((c) => c.name).join(' ⊔ ') + ' (' + src.comps.map((c) => c.count).join(' + ') + ') ✓ ∎']
-            : ['For a connected non-Dynkin quiver no τ⁻ʳP(i) is injective and no τʳI(i) is projective, so the preprojective and preinjective components are infinite and disjoint.',
-               'Shown: the first ' + ar.layers + ' layers of each; everything else is regular. ∎']
+            ? ['Every $\\tau^{-1}$-orbit ends at an injective module, so the preprojective component is finite; a finite component of a connected Auslander–Reiten quiver is the whole quiver (Auslander).',
+               'Hence the $' + ar.total + '$ modules shown are all the indecomposables, and $' + ar.total + (src.comps.length > 1 ? ' = ' + roots : '') + '$ is the number of positive roots of ' + types + '.']
+            : ['For a connected non-Dynkin quiver no $\\tau^{-r}P(i)$ is injective and no $\\tau^{r}I(i)$ is projective, so the preprojective and preinjective components are infinite and disjoint.',
+               'The picture shows their first $' + ar.layers + '$ layers; every other indecomposable is regular.'],
+          proof: true, qed: true
         });
       } else {
         const counts = {};
         main.forEach((it) => { counts[it.nd.deg] = (counts[it.nd.deg] || 0) + 1; });
+        const per = Object.keys(counts).sort((a, b) => a - b).map((k) => '$' + counts[k] + '$ in degree $[' + k + ']$').join(', ');
         entries.push({
-          title: 'Conclusion',
+          title: '**Theorem** (Happel). The Auslander–Reiten quiver of $D^b(\\operatorname{mod} kQ)$',
           lines: dyn
-            ? ['Objects per shift: ' + Object.keys(counts).sort((a, b) => a - b).map((k) => '[' + k + '] ' + counts[k]).join(', ') + '; each is a copy of mod kQ with ' + src.comps.map((c) => c.count).reduce((a, b) => a + b, 0) + ' indecomposables ✓',
-               'So the AR quiver of D^b(mod kQ) is ℤQ (Happel). ∎']
-            : ['The component through the projectives is ℤQ: preinjectives in degree [−1] followed by preprojectives in degree [0].',
-               'The other components of D^b are its shifts and the shifts of the regular components. ∎']
+            ? ['The objects found are ' + per + '; each degree is a copy of $\\operatorname{mod}kQ$ with $' + src.comps.map((c) => c.count).reduce((a, b) => a + b, 0) + '$ indecomposables.',
+               'Hence the Auslander–Reiten quiver of $D^b(\\operatorname{mod}kQ)$ is $\\mathbb{Z}Q$.']
+            : ['The component containing the projectives is $\\mathbb{Z}Q$: the preinjectives in degree $[-1]$ followed by the preprojectives in degree $[0]$.',
+               'The other components are its shifts and the shifts of the regular components.'],
+          proof: true, qed: true
         });
       }
     } else {
-      const lines = ['Knit ℤQ in D^b(mod kQ) exactly as in the D^b view, then identify each object X with F(X) = τ⁻¹X[1].',
-        'Hence X[1] ≅ τX in C_Q; in particular τ⁻¹I(j) = P(j)[1] and τ⁻¹(P(j)[1]) = F(P(j)) ≅ P(j).'];
+      const lines = ['Knit $\\mathbb{Z}Q$ in $D^b(\\operatorname{mod}kQ)$ as in the derived view, and identify $X$ with $F(X)$, where $F = \\tau^{-1}[1]$.',
+        'Then $X[1]\\cong\\tau X$ in $\\mathcal{C}_Q$; in particular $\\tau^{-1}I(j) = P(j)[1]$ and $\\tau^{-1}(P(j)[1]) = F(P(j))\\cong P(j)$:'];
+      const ids = [];
       src.tau.forEach((t) => {
         const X = items[t.from], TX = items[t.to];
         if (!X || !TX) return;
-        if (X.nd.shiftP >= 0) lines.push('τ⁻¹(' + TX.name + ') = ' + X.name);
-        if (X.nd.ghost) lines.push('τ⁻¹(' + TX.name + ') = ' + X.name + '  (wrap-around)');
-        if (TX.nd.shiftP >= 0 && !X.nd.ghost && X.nd.shiftP < 0) lines.push('τ⁻¹(' + TX.name + ') = ' + X.name);
+        if (X.nd.shiftP >= 0 || X.nd.ghost || (TX.nd.shiftP >= 0 && X.nd.shiftP < 0)) {
+          ids.push('$\\tau^{-1}(' + TX.tex + ') = ' + X.tex + '$' + (X.nd.ghost ? ' (wrap-around)' : ''));
+        }
       });
+      if (ids.length) lines.push(ids.join(', ') + '.');
       const dyn = src.comps.every((c) => c.kind === 'dynkin');
       if (dyn) {
         const roots = src.comps.map((c) => c.count).reduce((a, b) => a + b, 0);
-        lines.push(src.total + ' indecomposable objects = ' + roots + ' modules + ' + n + ' shifted projectives P(i)[1] ✓');
-        lines.push('This is the number of cluster variables of the cluster algebra of finite type ' + src.comps.map((c) => c.name).join(' ⊔ ') + ' (Buan–Marsh–Reineke–Reiten–Todorov). ∎');
+        lines.push('Hence $\\mathcal{C}_Q$ has $' + src.total + ' = ' + roots + ' + ' + n + '$ indecomposable objects: the indecomposable modules and the $P(i)[1]$.');
+        lines.push('This is the number of cluster variables of the cluster algebra of type ' + types + ' (Buan–Marsh–Reineke–Reiten–Todorov).');
       } else {
-        lines.push('The transjective component is ℤQ: preinjectives, then the P(i)[1], then preprojectives; the regular components are those of mod kQ. ∎');
+        lines.push('Hence the transjective component is $\\mathbb{Z}Q$ — preinjectives, then the $P(i)[1]$, then preprojectives — and the regular components are those of $\\operatorname{mod}kQ$.');
       }
-      entries.push({ title: 'Cluster category C_Q = D^b / ⟨τ⁻¹[1]⟩', lines: lines });
+      entries.push({ title: '**Theorem.** The cluster category $\\mathcal{C}_Q = D^b(\\operatorname{mod}kQ)/\\langle\\tau^{-1}[1]\\rangle$', lines: lines, proof: true, qed: true });
     }
 
     // 管
@@ -1374,17 +1478,14 @@
         if (c.kind !== 'euclidean' || !c.regular || !c.regular.ok) return;
         const reg = c.regular;
         const lines = [
-          'δ = ' + fmtVec(reg.delta) + ' spans the radical of the Tits form: q(δ) = 0.',
-          'Regular modules have defect ⟨δ, dim X⟩ = 0; τ acts on them by the Coxeter transformation Φ = −C·Eᵀ.',
-          'The real roots 0 < x < δ of defect 0 split into Φ-orbits; an orbit whose sum is δ consists of the regular simples of one exceptional tube:'
+          'The vector $\\delta = ' + texVec(reg.delta) + '$ spans the radical of the Tits form: $q(\\delta) = 0$.',
+          'A module $X$ is regular if and only if its defect $\\langle\\delta,\\underline{\\dim}\\,X\\rangle$ vanishes, and $\\underline{\\dim}\\,\\tau X = \\Phi\\,\\underline{\\dim}\\,X$ with the Coxeter transformation $\\Phi = -C E^{\\mathsf T}$.',
+          'The real roots $0 < x < \\delta$ of defect $0$ fall into $\\Phi$-orbits, and an orbit whose sum is $\\delta$ consists of the regular simples of one exceptional tube: $$\\begin{aligned}' +
+            reg.tubes.map((t, ti) => '\\text{tube } ' + (ti + 1) + ' \\ (\\text{rank } ' + t.rank + ')&:\\ ' + t.simples.map(texVec).join(' + ') + ' = \\delta').join('\\\\ ') + '\\end{aligned}$$',
+          'Since $\\sum(\\operatorname{rank} - 1) = ' + reg.tubes.reduce((a, t) => a + t.rank - 1, 0) + ' = n - 2$ with $n = ' + c.verts.length + '$, there are no other exceptional tubes.',
+          'The module $E_k[\\ell]$ has the $\\ell$ consecutive regular simples $E_k, E_{k-1}, \\dots$ as composition factors, and in a homogeneous tube $\\underline{\\dim}\\,M_\\lambda[\\ell] = \\ell\\,\\delta$.'
         ];
-        reg.tubes.forEach((t, ti) => {
-          lines.push('  tube ' + (ti + 1) + ', rank ' + t.rank + ': ' + t.simples.map(fmtVec).join(' + ') + ' = ' + fmtVec(reg.delta) + ' ✓');
-        });
-        const sum = reg.tubes.reduce((a, t) => a + t.rank - 1, 0);
-        lines.push('Σ(rank − 1) = ' + sum + ' = n − 2 for n = ' + c.verts.length + ' ✓, so there are no other exceptional tubes.');
-        lines.push('E_k[l] has the l consecutive regular simples E_k, E_k−1, … as composition factors; in a homogeneous tube M[l] has dim l·δ. ∎');
-        entries.push({ title: 'Regular components of ' + c.name, lines: lines });
+        entries.push({ title: '**Theorem.** Regular components of type $' + texType(c.name) + '$', lines: lines, proof: true, qed: true });
       });
     }
     return entries;
@@ -1396,7 +1497,7 @@
     if (!arDrawn) {
       const v = computeAR();
       entries = v.ar.reason === 'cyclic'
-        ? [{ title: 'No AR quiver', lines: ['Q has an oriented cycle, so kQ is infinite-dimensional; the knitting algorithm here needs an acyclic quiver.'] }]
+        ? [{ title: '**Remark.** No Auslander–Reiten quiver', lines: ['$Q$ has an oriented cycle, so $kQ$ is infinite-dimensional; the knitting algorithm needs an acyclic quiver.'], proof: false, qed: false }]
         : [];
     } else entries = arProofEntries();
     renderProofList(list, entries, 'Nothing to show.');
@@ -2092,9 +2193,9 @@
     render();
     toast(removed ? 'Imported (ignored ' + removed + ' arrow(s) between frozen vertices).' : 'Imported.');
     proof('Import', [
-      'Read a ' + n + '×' + n + ' integer matrix and checked b[i,j] = −b[j,i] (skew-symmetric).',
-      'Arrows: ' + (arrowList().length ? listText(arrowList(), 10) : 'none') + '.',
-      removed ? 'Ignored ' + removed + ' arrow(s) between frozen vertices.' : ''
+      'Read a $' + n + '\\times ' + n + '$ integer matrix and checked $b_{ij} = -b_{ji}$, i.e. that it is skew-symmetric.',
+      'Arrows: ' + (arrowList().length ? listT(arrowList(), 10) : 'none') + '.',
+      removed ? 'Ignored $' + removed + '$ arrow(s) between frozen vertices.' : ''
     ]);
     return true;
   }
