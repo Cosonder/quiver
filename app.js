@@ -31,13 +31,13 @@
   let paCache = { key: null, value: null };
 
   const MODE_HINTS = {
-    move: '拖动顶点调整位置；双击顶点在该处变异；双击空白处添加顶点。',
-    vertex: '点击空白处添加可变顶点（按住 Shift 添加冰冻顶点）。',
-    frozenVertex: '点击空白处添加冰冻顶点（方框）。',
-    arrow: '从起点拖到终点画一条箭头；也可以先点起点、再点终点。',
-    freeze: '点击顶点在可变 / 冰冻之间切换。',
-    delete: '点击箭头删除一条；点击顶点删除该顶点。',
-    mutate: '点击可变顶点 k，进行变异 μₖ。'
+    move: 'Drag vertices to move them; double-click a vertex to mutate there; double-click an empty spot to add a vertex.',
+    vertex: 'Click an empty spot to add a mutable vertex (hold Shift for a frozen vertex).',
+    frozenVertex: 'Click an empty spot to add a frozen vertex (square).',
+    arrow: 'Drag from the source to the target to draw an arrow, or click the source and then the target.',
+    freeze: 'Click a vertex to toggle between mutable and frozen.',
+    delete: 'Click an arrow to remove one arrow; click a vertex to delete it.',
+    mutate: 'Click a mutable vertex k to apply the mutation μₖ.'
   };
 
   // ---------------------------------------------------------------- 工具函数
@@ -153,14 +153,14 @@
   function addArrow(fromId, toId) {
     const i = idx(fromId), j = idx(toId);
     if (i < 0 || j < 0) return;
-    if (i === j) { toast('箭图中不允许有自环（1-圈）。'); return; }
+    if (i === j) { toast('Loops (1-cycles) are not allowed in a quiver.'); return; }
     const vi = state.vertices[i], vj = state.vertices[j];
-    if (vi.frozen && vj.frozen) { toast('冰箭图中冰冻顶点之间不画箭头。'); return; }
+    if (vi.frozen && vj.frozen) { toast('Ice quivers have no arrows between frozen vertices.'); return; }
     pushUndo();
     structural();
     state.B[i][j] += 1;
     state.B[j][i] -= 1;
-    if (state.B[i][j] <= 0) toast('与反方向的箭头抵消了（箭图不含 2-圈）。');
+    if (state.B[i][j] <= 0) toast('Cancelled against an arrow in the opposite direction (quivers have no 2-cycles).');
     render();
   }
 
@@ -188,7 +188,7 @@
           state.B[j][i] = 0;
         }
       });
-      if (removed) toast('已删除冰冻顶点之间的 ' + removed + ' 条箭头。');
+      if (removed) toast('Removed ' + removed + ' arrow(s) between frozen vertices.');
     }
     render();
   }
@@ -209,9 +209,9 @@
     const v = byId(id);
     label = label.trim();
     if (!v || label === v.label) return;
-    if (!label) { toast('标签不能为空。'); render(); return; }
-    if (/[\s,，;]/.test(label)) { toast('标签不能包含空格或逗号。'); render(); return; }
-    if (state.vertices.some((w) => w !== v && w.label === label)) { toast('标签「' + label + '」已被使用。'); render(); return; }
+    if (!label) { toast('The label cannot be empty.'); render(); return; }
+    if (/[\s,，;]/.test(label)) { toast('Labels cannot contain spaces or commas.'); render(); return; }
+    if (state.vertices.some((w) => w !== v && w.label === label)) { toast('The label “' + label + '” is already in use.'); render(); return; }
     pushUndo();
     v.label = label;
     render();
@@ -230,7 +230,7 @@
   function mutateAt(id) {
     const i = idx(id);
     if (i < 0) return;
-    if (state.vertices[i].frozen) { toast('不能在冰冻顶点处变异。'); return; }
+    if (state.vertices[i].frozen) { toast('Cannot mutate at a frozen vertex.'); return; }
     stopDemo();
     pushUndo();
     const stages = applyMutation(i);
@@ -245,12 +245,12 @@
 
   function runSequence(text) {
     const tokens = text.split(/[\s,，;；]+/).map((t) => t.replace(/^(μ|mu)_?/i, '')).filter(Boolean);
-    if (!tokens.length) { toast('请输入变异序列，例如：1 2 1'); return; }
+    if (!tokens.length) { toast('Enter a mutation sequence, e.g. 1 2 1'); return; }
     const ids = [];
     for (const t of tokens) {
       const v = state.vertices.find((w) => w.label === t);
-      if (!v) { toast('找不到标签为「' + t + '」的顶点。'); return; }
-      if (v.frozen) { toast('「' + t + '」是冰冻顶点，不能变异。'); return; }
+      if (!v) { toast('No vertex has the label “' + t + '”.'); return; }
+      if (v.frozen) { toast('“' + t + '” is a frozen vertex and cannot be mutated.'); return; }
       ids.push(v.id);
     }
     if (ids.length === 1) { mutateAt(ids[0]); return; }
@@ -259,26 +259,26 @@
     ids.forEach((id) => applyMutation(idx(id)));
     render();
     flash(ids[ids.length - 1]);
-    toast('已执行 ' + ids.length + ' 次变异。');
+    toast('Applied ' + ids.length + ' mutations.');
   }
 
   function randomMutation() {
     const last = state.seq[state.seq.length - 1];
     let cand = state.vertices.filter((v) => !v.frozen && v.id !== last);
     if (!cand.length) cand = state.vertices.filter((v) => !v.frozen);
-    if (!cand.length) { toast('没有可变顶点。'); return; }
+    if (!cand.length) { toast('There are no mutable vertices.'); return; }
     mutateAt(cand[Math.floor(Math.random() * cand.length)].id);
   }
 
   function backToSeed() {
-    if (!state.seed) { toast('当前没有变异记录。'); return; }
+    if (!state.seed) { toast('No mutations have been applied yet.'); return; }
     stopDemo();
     pushUndo();
     state.B = JSON.parse(state.seed);
     state.seq = [];
     state.seed = null;
     render();
-    toast('已回到初始种子。');
+    toast('Back to the initial seed.');
   }
 
   function stopDemo() {
@@ -306,7 +306,7 @@
 
   function addCoefficients(sign) {
     const mutable = state.vertices.filter((v) => !v.frozen);
-    if (!mutable.length) { toast('没有可变顶点。'); return; }
+    if (!mutable.length) { toast('There are no mutable vertices.'); return; }
     pushUndo();
     structural();
     const c = centroid();
@@ -320,11 +320,11 @@
       state.B[j][i] = -sign;
     });
     render();
-    toast(sign > 0 ? '已添加主系数：i → i′。' : '已添加对偶系数：i′ → i。');
+    toast(sign > 0 ? 'Added principal coefficients: i → i′.' : 'Added coprincipal coefficients: i′ → i.');
   }
 
   function unfreezeAll() {
-    if (!state.vertices.some((v) => v.frozen)) { toast('没有冰冻顶点。'); return; }
+    if (!state.vertices.some((v) => v.frozen)) { toast('There are no frozen vertices.'); return; }
     pushUndo();
     structural();
     state.vertices.forEach((v) => { v.frozen = false; });
@@ -332,7 +332,7 @@
   }
 
   function removeFrozen() {
-    if (!state.vertices.some((v) => v.frozen)) { toast('没有冰冻顶点。'); return; }
+    if (!state.vertices.some((v) => v.frozen)) { toast('There are no frozen vertices.'); return; }
     pushUndo();
     structural();
     for (let i = state.vertices.length - 1; i >= 0; i--) {
@@ -540,19 +540,19 @@
     // 概要
     let html = '';
     if (!info.verts.length) {
-      html = '<span class="hint">没有顶点。</span>';
+      html = '<span class="hint">No vertices.</span>';
     } else {
       html += '<div>dim ' + algName + ' = <span class="big">' + fmt(pa.dim) + '</span></div>';
       if (!pa.acyclic) {
         const cyc = pa.onCycle.map((a) => V[info.verts[a]].label).join(', ');
-        html += '<div class="' + (o.trunc ? 'hint' : 'warn') + '">Q 含有向圈（经过顶点 ' + cyc + '）' +
-          (o.trunc ? '。' : '，kQ 是无穷维的；可选择「截断」。') + '</div>';
+        html += '<div class="' + (o.trunc ? 'hint' : 'warn') + '">Q has an oriented cycle (through ' + cyc + ')' +
+          (o.trunc ? '.' : ', so kQ is infinite-dimensional; try “Truncated”.') + '</div>';
       }
       html += '<dl>' +
-        '<dt>顶点 / 箭头</dt><dd>' + info.verts.length + ' / ' + nArrows + '</dd>' +
-        '<dt>有向圈</dt><dd>' + (pa.acyclic ? '无（Q 无圈）' : '有') + '</dd>' +
-        '<dt>Loewy 长度</dt><dd>' + (pa.loewy != null ? pa.loewy : '∞') + '</dd>' +
-        (pa.finite && pa.loewy ? '<dt>最长非零路</dt><dd>' + (pa.loewy - 1) + '</dd>' : '') +
+        '<dt>Vertices / arrows</dt><dd>' + info.verts.length + ' / ' + nArrows + '</dd>' +
+        '<dt>Oriented cycles</dt><dd>' + (pa.acyclic ? 'none (Q is acyclic)' : 'yes') + '</dd>' +
+        '<dt>Loewy length</dt><dd>' + (pa.loewy != null ? pa.loewy : '∞') + '</dd>' +
+        (pa.finite && pa.loewy ? '<dt>Longest nonzero path</dt><dd>' + (pa.loewy - 1) + '</dd>' : '') +
         '</dl>';
     }
     $('pa-summary').innerHTML = html;
@@ -563,7 +563,7 @@
     if (modHL && (idx(modHL.id) < 0 || info.verts.indexOf(idx(modHL.id)) < 0)) modHL = null;
     let t = '';
     if (info.verts.length) {
-      t += '<thead><tr><th>模</th>' + info.verts.map((i) => '<th class="' + (V[i].frozen ? 'frozen' : '') + '">' + esc(V[i].label) + '</th>').join('') + '<th>dim</th></tr></thead><tbody>';
+      t += '<thead><tr><th>Module</th>' + info.verts.map((i) => '<th class="' + (V[i].frozen ? 'frozen' : '') + '">' + esc(V[i].label) + '</th>').join('') + '<th>dim</th></tr></thead><tbody>';
       const totals = info.verts.map(() => 0n);
       let totalsInf = info.verts.map(() => false);
       info.verts.forEach((i, a) => {
@@ -596,12 +596,12 @@
       const isP = modHL.kind === 'P';
       const title = document.createElement('div');
       title.className = 'title';
-      title.textContent = modName(modHL.kind, label) + (isP ? ' 的根层（自顶向下）' : ' 的基座层（自下向上）');
+      title.textContent = modName(modHL.kind, label) + (isP ? ': radical layers (top down)' : ': socle layers (bottom up)');
       box.appendChild(title);
       const lw = document.createElement('div');
       lw.className = 'loewy';
-      const rows = ls.map((vec, l) => ({ name: (isP ? (l === 0 ? '顶' : 'rad' + sup(l)) : (l === 0 ? '基座' : 'soc' + sup(l + 1))), text: layerText(vec, info) }));
-      if (!pa.finite) rows.push({ name: '…', text: '（无穷多层）' });
+      const rows = ls.map((vec, l) => ({ name: (isP ? (l === 0 ? 'top' : 'rad' + sup(l)) : (l === 0 ? 'socle' : 'soc' + sup(l + 1))), text: layerText(vec, info) }));
+      if (!pa.finite) rows.push({ name: '…', text: '(infinitely many layers)' });
       (isP ? rows : rows.slice().reverse()).forEach((r) => {
         const row = document.createElement('div');
         row.className = 'layer';
@@ -614,8 +614,8 @@
       const hint = document.createElement('p');
       hint.className = 'hint';
       hint.textContent = isP
-        ? '第 l 层 = 从 ' + label + ' 出发、长度为 l 的路的终点。'
-        : '自下第 l 层 = 长度为 l、终点为 ' + label + ' 的路的起点。';
+        ? 'Layer l = endpoints of the paths of length l starting at ' + label + '.'
+        : 'Layer l from the bottom = starting points of the paths of length l ending at ' + label + '.';
       box.appendChild(hint);
     }
   }
@@ -658,29 +658,29 @@
   function arSummary(value) {
     const ar = value.ar, info = value.info;
     if (!ar.ok) {
-      if (ar.reason === 'empty') return '没有顶点。';
+      if (ar.reason === 'empty') return 'No vertices.';
       const esc = (t) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
       const cyc = (ar.cycle || []).map((a) => vlabel(info, a));
-      const cycText = cyc.length ? '（例如 ' + esc(cyc.concat(cyc[0]).join(' → ')) + '）' : '';
-      return '<span class="ar-warn">当前箭图含有向圈' + cycText + '，kQ 是无穷维的，无法计算 AR 箭图。</span>' +
-        '目前只支持无圈箭图的路代数。';
+      const cycText = cyc.length ? ' (e.g. ' + esc(cyc.concat(cyc[0]).join(' → ')) + ')' : '';
+      return '<span class="ar-warn">The quiver has an oriented cycle' + cycText + ', so kQ is infinite-dimensional and the AR quiver cannot be computed.</span>' +
+        'Only path algebras of acyclic quivers are supported.';
     }
     const kindName = { dynkin: '', euclidean: ' Euclidean', wild: '' };
     const names = ar.comps.map((c) => c.name + kindName[c.kind]).join(' ⊔ ');
     let html;
     if (ar.finite) {
-      html = '有限表示型（' + names + '），共 <b>' + ar.total + '</b> 个不可分解模（与正根一一对应）。';
+      html = 'Representation-finite (' + names + '): <b>' + ar.total + '</b> indecomposable modules (in bijection with the positive roots).';
     } else {
-      html = '无限表示型（' + names + '）。画出预投射、预内射分支的前 ' + ar.layers + ' 层';
+      html = 'Representation-infinite (' + names + '). Showing the first ' + ar.layers + ' layers of the preprojective and preinjective components';
       const tubeText = ar.comps.filter((c) => c.kind === 'euclidean' && c.regular && c.regular.ok).map((c) => {
         const rk = c.regular.tubes.map((t) => t.rank);
-        return (rk.length ? '例外管 rank ' + rk.join(', ') + ' 与' : '') + '齐次管';
+        return (rk.length ? 'exceptional tubes of rank ' + rk.join(', ') + ' and ' : '') + 'homogeneous tubes';
       });
-      if (tubeText.length) html += '；正则分支是 ℙ¹ 参数族的管（' + tubeText.join('；') + '）';
-      if (ar.comps.some((c) => c.kind === 'wild')) html += '；wild 型的正则分支（无穷多个 ℤA∞ 型分支）未画出';
-      html += '。';
+      if (tubeText.length) html += '; the regular components form a ℙ¹-family of tubes (' + tubeText.join('; ') + ')';
+      if (ar.comps.some((c) => c.kind === 'wild')) html += '; the regular components of wild type (infinitely many components of type ℤA∞) are not drawn';
+      html += '.';
     }
-    if (info.opts.trunc) html += ' 注：按无关系的 kQ 计算，不考虑截断。';
+    if (info.opts.trunc) html += ' Note: computed for kQ without relations, ignoring the truncation.';
     return html;
   }
 
@@ -688,7 +688,7 @@
     const value = computeAR();
     $('ar-summary').innerHTML = arSummary(value);
     $('btn-ar').disabled = false;
-    $('btn-ar').textContent = value.ar.ok ? '查看 AR 箭图' : '查看 AR 箭图（当前不可计算）';
+    $('btn-ar').textContent = value.ar.ok ? 'Show AR quiver' : 'Show AR quiver (not available now)';
   }
 
   /** 箭图有圈时，给出可以得到无圈箭图的操作 */
@@ -696,7 +696,7 @@
     const box = $('ar-info');
     box.innerHTML = '';
     if (value.ar.reason !== 'cyclic') return;
-    box.append('可以试试：');
+    box.append('You can try: ');
     const add = (text, fn) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -710,14 +710,14 @@
       const mut = [];
       state.vertices.forEach((v, i) => { if (!v.frozen) mut.push(i); });
       const A = mut.map((i) => mut.map((j) => Math.max(state.B[i][j], 0)));
-      if (mut.length && AR.topoOrder(A)) add('只用可变部分（可变部分无圈）', () => { $('pa-mutable').checked = true; render(); });
+      if (mut.length && AR.topoOrder(A)) add('Mutable part only (it is acyclic)', () => { $('pa-mutable').checked = true; render(); });
     }
-    if (state.seed) add('回到初始种子', backToSeed);
-    if (undoStack.length) add('撤销上一步', undo);
-    add('打开示例 A₃', () => loadPreset('A3'));
+    if (state.seed) add('Back to initial seed', backToSeed);
+    if (undoStack.length) add('Undo last step', undo);
+    add('Open example A₃', () => loadPreset('A3'));
     const p = document.createElement('p');
     p.className = 'hint';
-    p.textContent = '变异常常会产生有向圈；箭图无圈时（例如 Dynkin 型箭图的某些定向）才能计算 AR 箭图。';
+    p.textContent = 'Mutation often creates oriented cycles; the AR quiver can only be computed when the quiver is acyclic (for example, an orientation of a Dynkin diagram).';
     box.append(p);
   }
 
@@ -760,18 +760,18 @@
     const shown = D.nodes.filter((x) => !x.ghost).length;
     if (D.category === 'derived') {
       if (dyn) {
-        return '<b>D<sup>b</sup>(mod kQ)</b>（' + names + '）：AR 箭图是 ℤQ（Happel 定理）。每个平移 [d] 是 mod kQ 的一份拷贝，相邻两份由 τ⁻¹I(j) = P(j)[1] 连接。' +
-          '图中显示平移 [' + D.dmin + '] 到 [' + D.dmax + ']，共 ' + shown + ' 个对象；平移奇数次的对象带底色。';
+        return '<b>D<sup>b</sup>(mod kQ)</b> (' + names + '): the AR quiver is ℤQ (Happel’s theorem). Each shift [d] is a copy of mod kQ, and consecutive copies are joined by τ⁻¹I(j) = P(j)[1]. ' +
+          'Showing shifts [' + D.dmin + '] to [' + D.dmax + '], ' + shown + ' objects in total; objects with an odd shift are shaded.';
       }
-      return '<b>D<sup>b</sup>(mod kQ)</b>（' + names + '）：图中是含投射模的分支 ℤQ = 预内射模[−1] ∪ 预投射模，τ 方向两侧各 ' + D.layers + ' 步。' +
-        '其余分支是它的平移 [d]，以及正则分支的平移' + (euclid ? '（Euclidean 型为管，下方画出平移 [0] 的管）' : '') + (wild ? '（wild 型为 ℤA∞ 型，未画出）' : '') + '。';
+      return '<b>D<sup>b</sup>(mod kQ)</b> (' + names + '): showing the component containing the projectives, ℤQ = preinjectives[−1] ∪ preprojectives, ' + D.layers + ' τ-steps in each direction. ' +
+        'The other components are its shifts [d] and the shifts of the regular components' + (euclid ? ' (tubes for Euclidean type; the tubes in degree [0] are drawn below)' : '') + (wild ? ' (of type ℤA∞ for wild type, not drawn)' : '') + '.';
     }
     if (dyn) {
-      return '<b>丛范畴 C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1]</b>（' + names + '）：共 <b>' + D.total + '</b> 个不可分解对象 = ' + (D.total - n) + ' 个不可分解模 + ' + n +
-        ' 个 P(i)[1]（红框），与丛代数的丛变量一一对应。虚线框是绕回时重复画出的 P(i)：τ⁻¹(P(i)[1]) = P(i)。';
+      return '<b>Cluster category C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1]</b> (' + names + '): <b>' + D.total + '</b> indecomposable objects = ' + (D.total - n) + ' indecomposable modules + ' + n +
+        ' objects P(i)[1] (red), in bijection with the cluster variables of the cluster algebra. Dashed boxes repeat P(i) to show the wrap-around τ⁻¹(P(i)[1]) = P(i).';
     }
-    return '<b>丛范畴 C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1]</b>（' + names + '）：转移分支是 ℤQ：… → τI → I → P[1] → P → τ⁻¹P → …（两侧各约 ' + D.layers + ' 步，P(i)[1] 为红框）；' +
-      '正则分支与 mod kQ 中相同' + (euclid ? '（下方画出管）' : '') + (wild ? '（wild 型未画出）' : '') + '。';
+    return '<b>Cluster category C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1]</b> (' + names + '): the transjective component is ℤQ: … → τI → I → P[1] → P → τ⁻¹P → … (about ' + D.layers + ' steps in each direction; P(i)[1] in red); ' +
+      'the regular components are the same as in mod kQ' + (euclid ? ' (tubes drawn below)' : '') + (wild ? ' (not drawn for wild type)' : '') + '.';
   }
 
   function drawAR() {
@@ -784,7 +784,7 @@
     $('ar-layers-wrap').hidden = !ar.ok || ar.finite;
     const hasEuclid = ar.ok && ar.comps.some((c) => c.kind === 'euclidean');
     $('ar-reg-wrap').hidden = !hasEuclid;
-    $('ar-order').textContent = ar.ok ? '维数向量分量顺序：(' + info.verts.map((i) => state.vertices[i].label).join(', ') + ')' : '';
+    $('ar-order').textContent = ar.ok ? 'Vertex order in dimension vectors: (' + info.verts.map((i) => state.vertices[i].label).join(', ') + ')' : '';
     document.querySelectorAll('.ar-controls, #ar-scroll, .ar-legend').forEach((x) => { x.hidden = !ar.ok; });
     $('dlg-ar').classList.toggle('compact', !ar.ok);
     if (!ar.ok) {
@@ -893,7 +893,7 @@
       let cursor = left;
       tubeBoxes.forEach((b) => {
         if (b.failed) {
-          decorations.push({ type: 'text', x: cursor, y: top + UY, text: b.comp.name + '：δ 太大，未计算管。', anchor: 'start' });
+          decorations.push({ type: 'text', x: cursor, y: top + UY, text: b.comp.name + ': δ is too large; tubes not computed.', anchor: 'start' });
           cursor += 12 * UX;
           return;
         }
@@ -901,11 +901,11 @@
         const x0 = cursor;
         b.cells.forEach((it) => { it.X = x0 + it.tx * UX; it.Y = top + 1.15 * UY + (L - it.l) * UY; });
         const bottom = top + 1.15 * UY + (L - 1) * UY;
-        const title = (multi ? b.comp.name + ' · ' : '') + (b.tube.homog ? '齐次管（rank 1）' : '例外管 ' + b.tube.index + '（rank ' + r + '）') + (cat === 'derived' ? ' [0]' : '');
+        const title = (multi ? b.comp.name + ' · ' : '') + (b.tube.homog ? 'Homogeneous tube (rank 1)' : 'Exceptional tube ' + b.tube.index + ' (rank ' + r + ')') + (cat === 'derived' ? ' [0]' : '');
         decorations.push({ type: 'text', x: x0 + r * UX, y: top, text: title, cls: 'ar-tube-title' });
         decorations.push({ type: 'vline', x: x0, y1: top + 0.45 * UY, y2: bottom + 0.5 * UY });
         decorations.push({ type: 'vline', x: x0 + 2 * r * UX, y1: top + 0.45 * UY, y2: bottom + 0.5 * UY });
-        decorations.push({ type: 'text', x: x0 + r * UX, y: bottom + 0.85 * UY, text: b.tube.homog ? 'ℙ¹ 中其余每一点各一个' : '左右两条虚线粘合', cls: 'ar-tube-note' });
+        decorations.push({ type: 'text', x: x0 + r * UX, y: bottom + 0.85 * UY, text: b.tube.homog ? 'one for each remaining point of ℙ¹' : 'the two dashed edges are glued', cls: 'ar-tube-note' });
         cursor = x0 + 2 * r * UX + Math.max(4 * UX, maxW + 24);
         W = Math.max(W, x0 + 2 * r * UX + PAD + maxW / 2);
         H = Math.max(H, bottom + 0.85 * UY + PAD);
@@ -970,7 +970,7 @@
       const yMid = PAD + (c.rowStart + (c.rows - 1) / 2) * UY;
       if (multi) el('text', { x: 8, y: yMid, class: 'ar-comp', 'dominant-baseline': 'central' }, eN).textContent = c.name;
       if (c.gapX != null) {
-        const label = c.kind === 'wild' ? '⋯ wild ⋯' : (showReg ? '⋯ 管 ↓ ⋯' : '⋯ 正则分支 ⋯');
+        const label = c.kind === 'wild' ? '⋯ wild ⋯' : (showReg ? '⋯ tubes ↓ ⋯' : '⋯ regular ⋯');
         el('text', { x: left + (c.gapX - minX) * UX, y: yMid, class: 'ar-gap' }, eN).textContent = label;
       }
     });
@@ -1023,9 +1023,9 @@
     if (arSel == null || !items[arSel]) {
       const nReg = items.filter((it) => it.kind === 'tube' && !it.ghost).length;
       const nMain = items.filter((it) => it.kind !== 'tube' && !it.ghost).length;
-      box.textContent = '点击一个对象查看详情，同时高亮它的直接前驱与后继。图中共 ' + nMain + ' 个' +
-        (arDrawn.cat === 'mod' ? (ar.finite ? '不可分解模' : '预投射 / 预内射模') : '对象') +
-        (nReg ? '，以及管中的 ' + nReg + ' 个模' : '') + '。';
+      box.textContent = 'Click an object for details; its direct predecessors and successors are highlighted. Shown: ' + nMain + ' ' +
+        (arDrawn.cat === 'mod' ? (ar.finite ? 'indecomposable modules' : 'preprojective / preinjective modules') : 'objects') +
+        (nReg ? ', plus ' + nReg + ' modules in tubes' : '') + '.';
       return;
     }
     const it = items[arSel];
@@ -1048,29 +1048,29 @@
     box.innerHTML = '';
     const b = document.createElement('b');
     b.textContent = parts.join(' ≅ ');
-    box.append(b, '　dim = ');
+    box.append(b, '  dim = ');
     const code = document.createElement('code');
     code.textContent = '(' + it.dim.join(', ') + ')';
     let where;
-    if (it.kind === 'ar') where = '，所在分支 ' + ar.comps[it.nd.comp].name + (it.nd.kind === 'P' ? '（预投射）' : '（预内射）');
+    if (it.kind === 'ar') where = ', component ' + ar.comps[it.nd.comp].name + (it.nd.kind === 'P' ? ' (preprojective)' : ' (preinjective)');
     else if (it.kind === 'der') {
       const nd = it.nd;
       if (arDrawn.cat === 'derived') {
-        where = '；K₀ 中的类 (' + nd.cls.join(', ') + ')' + (nd.deg ? '，对象是 M[' + nd.deg + ']，M 为上述维数向量的模' : '，是 mod kQ 中的模');
+        where = '; class in K₀: (' + nd.cls.join(', ') + ')' + (nd.deg ? '; the object is M[' + nd.deg + '], where M is the module with the dimension vector above' : '; a module in mod kQ');
       } else if (nd.ghost) {
-        where = '；与 P' + vlabel(info, nd.proj) + ' 是同一个对象：τ⁻¹(P' + vlabel(info, nd.proj) + '[1]) = P' + vlabel(info, nd.proj) + '，这里重复画出以显示绕回';
+        where = '; the same object as P' + vlabel(info, nd.proj) + ': τ⁻¹(P' + vlabel(info, nd.proj) + '[1]) = P' + vlabel(info, nd.proj) + ', repeated here to show the wrap-around';
       } else if (nd.shiftP >= 0) {
-        where = '；丛范畴中的 P' + vlabel(info, nd.shiftP) + '[1]，对应初始丛变量 x' + vlabel(info, nd.shiftP) + '（括号内为 P' + vlabel(info, nd.shiftP) + ' 的维数向量）';
+        where = '; the object P' + vlabel(info, nd.shiftP) + '[1] of the cluster category, corresponding to the initial cluster variable x' + vlabel(info, nd.shiftP) + ' (the vector shown is dim P' + vlabel(info, nd.shiftP) + ')';
       } else {
-        where = '；丛范畴中的不可分解模，对应一个非初始丛变量，其分母向量为 dim M';
+        where = '; an indecomposable module in the cluster category, corresponding to a non-initial cluster variable with denominator vector dim M';
       }
     }
-    else if (it.tube.homog) where = '，正则模，在齐次管中（拟长度 ' + it.l + '，dim = ' + it.l + 'δ；对 ℙ¹ 中例外点之外的每个 λ 各有一个）';
-    else where = '，正则模，在例外管 ' + it.tube.index + '（rank ' + it.tube.rank + '）中，拟长度 ' + it.l +
-      (it.l === 1 ? '（正则单模）' : '') + (it.l % it.tube.rank === 0 ? '，dim 是 δ 的倍数' : '');
-    box.append(code, '，总维数 ' + total + where);
+    else if (it.tube.homog) where = ', regular, in a homogeneous tube (quasi-length ' + it.l + ', dim = ' + it.l + 'δ; one for each λ ∈ ℙ¹ outside the exceptional points)';
+    else where = ', regular, in exceptional tube ' + it.tube.index + ' (rank ' + it.tube.rank + '), quasi-length ' + it.l +
+      (it.l === 1 ? ' (regular simple)' : '') + (it.l % it.tube.rank === 0 ? ', dim is a multiple of δ' : '');
+    box.append(code, ', total dimension ' + total + where);
     box.append(document.createElement('br'));
-    box.append('直接前驱：' + (preds.join('，') || '无') + '；直接后继：' + (succs.join('，') || '无'));
+    box.append('Direct predecessors: ' + (preds.join(', ') || 'none') + '; direct successors: ' + (succs.join(', ') || 'none'));
   }
 
   /** 画布上要标注的维数：Map(vertex id → BigInt | null) */
@@ -1175,7 +1175,7 @@
     const table = $('matrix');
     const full = $('opt-full').checked;
     if (!V.length) {
-      table.innerHTML = '<tr><td class="matrix-empty">（空箭图）</td></tr>';
+      table.innerHTML = '<tr><td class="matrix-empty">(empty quiver)</td></tr>';
       $('matrix-caption').textContent = '';
       return;
     }
@@ -1184,8 +1184,8 @@
     const rows = mut.concat(frz);
     const cols = full ? rows : mut;
     $('matrix-caption').textContent = full
-      ? '完整斜对称矩阵（' + V.length + '×' + V.length + '），先列可变顶点，再列冰冻顶点。'
-      : '扩展交换矩阵 B̃（' + rows.length + '×' + cols.length + '）：行 = 全部顶点，列 = 可变顶点；冰冻顶点所在行为系数部分。';
+      ? 'Full skew-symmetric matrix (' + V.length + '×' + V.length + '); mutable vertices first, then frozen ones.'
+      : 'Extended exchange matrix B̃ (' + rows.length + '×' + cols.length + '): rows = all vertices, columns = mutable vertices; the frozen rows form the coefficient part.';
     const esc = (s) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
     let html = '<tr><th></th>' + cols.map((c) => '<th class="' + (V[c].frozen ? 'frozen' : '') + '">' + esc(V[c].label) + '</th>').join('') + '</tr>';
     rows.forEach((r, ri) => {
@@ -1199,7 +1199,7 @@
       });
       html += '</tr>';
     });
-    if (!cols.length) html += '<tr><td class="matrix-empty" colspan="2">没有可变顶点</td></tr>';
+    if (!cols.length) html += '<tr><td class="matrix-empty" colspan="2">No mutable vertices</td></tr>';
     table.innerHTML = html;
   }
 
@@ -1209,12 +1209,12 @@
     state.B.forEach((row) => row.forEach((x) => { if (x > 0) { arrows += x; maxMult = Math.max(maxMult, x); } }));
     const nm = V.filter((v) => !v.frozen).length;
     const items = [
-      ['顶点', V.length],
-      ['可变顶点', nm],
-      ['冰冻顶点', V.length - nm],
-      ['箭头', arrows],
-      ['最大重数', maxMult],
-      ['变异次数', state.seq.length]
+      ['Vertices', V.length],
+      ['Mutable', nm],
+      ['Frozen', V.length - nm],
+      ['Arrows', arrows],
+      ['Max multiplicity', maxMult],
+      ['Mutations', state.seq.length]
     ];
     $('stats').innerHTML = items.map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
   }
@@ -1222,12 +1222,12 @@
   function renderSeq() {
     const log = $('seq-log');
     if (!state.seq.length) {
-      log.textContent = '尚未变异。';
+      log.textContent = 'No mutations yet.';
       return;
     }
     const labels = state.seq.map((id) => { const v = byId(id); return v ? v.label : '?'; });
     log.innerHTML = '';
-    log.append('已执行：');
+    log.append('Applied: ');
     labels.forEach((l, k) => {
       const b = document.createElement('b');
       b.textContent = 'μ' + l;
@@ -1258,7 +1258,7 @@
     $('stage-count').textContent = (demo.step + 1) + ' / ' + demo.stages.length;
     $('stage-prev').disabled = demo.step === 0;
     $('stage-next').disabled = demo.step === demo.stages.length - 1;
-    $('stage-play').textContent = playTimer ? '暂停' : '自动播放';
+    $('stage-play').textContent = playTimer ? 'Pause' : 'Play';
   }
 
   function renderTools() {
@@ -1289,7 +1289,7 @@
   }
 
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, snapshot()); } catch (e) { /* 忽略 */ }
+    try { localStorage.setItem(STORAGE_KEY, snapshot()); } catch (e) { /* ignore */ }
   }
 
   function load() {
@@ -1465,7 +1465,7 @@
   $('btn-random').addEventListener('click', randomMutation);
   $('btn-seed').addEventListener('click', backToSeed);
   $('opt-steps').addEventListener('change', () => {
-    try { localStorage.setItem(STORAGE_KEY + '-steps', $('opt-steps').checked ? '1' : '0'); } catch (e) { /* 忽略 */ }
+    try { localStorage.setItem(STORAGE_KEY + '-steps', $('opt-steps').checked ? '1' : '0'); } catch (e) { /* ignore */ }
   });
 
   $('btn-principal').addEventListener('click', () => addCoefficients(1));
@@ -1526,7 +1526,7 @@
     const t = e.target;
     if (!t.dataset || t.dataset.r == null) return;
     const v = Number(t.value);
-    if (!Number.isInteger(v) || Math.abs(v) > 99) { toast('请输入 −99 到 99 之间的整数。'); renderMatrix(); return; }
+    if (!Number.isInteger(v) || Math.abs(v) > 99) { toast('Enter an integer between −99 and 99.'); renderMatrix(); return; }
     setEntry(+t.dataset.r, +t.dataset.c, v);
   });
 
@@ -1595,7 +1595,7 @@
     const fr = [];
     V.forEach((v, i) => { if (v.frozen) fr.push(i + 1); });
     const width = Math.max(2, ...state.B.flat().map((x) => String(x).length)) + 1;
-    let s = '# 顶点顺序: ' + V.map((v) => v.label).join(' ') + '\n';
+    let s = '# vertex order: ' + V.map((v) => v.label).join(' ') + '\n';
     if (fr.length) s += 'frozen: ' + fr.join(' ') + '\n';
     s += state.B.map((r) => r.map((x) => String(x).padStart(width)).join('')).join('\n') + '\n';
     return s;
@@ -1632,12 +1632,12 @@
 
   function importText(text) {
     text = text.trim();
-    if (!text) { toast('内容为空。'); return false; }
+    if (!text) { toast('Nothing to import.'); return false; }
     let next = null;
     if (text[0] === '{') {
       let o;
-      try { o = JSON.parse(text); } catch (e) { toast('JSON 解析失败：' + e.message); return false; }
-      if (!Array.isArray(o.vertices) || !Array.isArray(o.matrix)) { toast('JSON 缺少 vertices 或 matrix。'); return false; }
+      try { o = JSON.parse(text); } catch (e) { toast('Could not parse JSON: ' + e.message); return false; }
+      if (!Array.isArray(o.vertices) || !Array.isArray(o.matrix)) { toast('The JSON is missing “vertices” or “matrix”.'); return false; }
       const s = canvasSize();
       const n = o.vertices.length;
       const vertices = o.vertices.map((v, k) => ({
@@ -1671,11 +1671,11 @@
     }
     const n = next.vertices.length;
     if (next.B.length !== n || next.B.some((r) => !Array.isArray(r) || r.length !== n || r.some((x) => !Number.isInteger(x)))) {
-      toast('矩阵必须是 ' + n + '×' + n + ' 的整数方阵。');
+      toast('The matrix must be a square ' + n + '×' + n + ' integer matrix.');
       return false;
     }
-    if (new Set(next.vertices.map((v) => v.label)).size !== n) { toast('顶点标签有重复。'); return false; }
-    if (!Q.isSkewSymmetric(next.B)) { toast('矩阵不是斜对称的（需要 b_ij = −b_ji）。'); return false; }
+    if (new Set(next.vertices.map((v) => v.label)).size !== n) { toast('Vertex labels must be distinct.'); return false; }
+    if (!Q.isSkewSymmetric(next.B)) { toast('The matrix is not skew-symmetric (need b_ij = −b_ji).'); return false; }
     let removed = 0;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       if (i !== j && next.vertices[i].frozen && next.vertices[j].frozen && next.B[i][j] !== 0) {
@@ -1688,7 +1688,7 @@
     state = next;
     selected = null;
     render();
-    toast(removed ? '已导入（忽略了冰冻顶点之间的 ' + removed + ' 条箭头）。' : '已导入。');
+    toast(removed ? 'Imported (ignored ' + removed + ' arrow(s) between frozen vertices).' : 'Imported.');
     return true;
   }
 
@@ -1697,7 +1697,7 @@
   $('io-matrix').addEventListener('click', () => { $('io-text').value = exportMatrix(); });
   $('io-copy').addEventListener('click', () => {
     const ta = $('io-text');
-    const done = () => toast('已复制到剪贴板。');
+    const done = () => toast('Copied to clipboard.');
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(ta.value).then(done, () => { ta.select(); document.execCommand('copy'); done(); });
     } else {
