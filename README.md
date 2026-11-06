@@ -1,44 +1,53 @@
 # quiver
 
-**在线使用：<https://cosonder.github.io/quiver/>**
+**Try it online: <https://cosonder.github.io/quiver/>**
 
-一个纯前端的网页工具：绘制**箭图（quiver）**与**冰箭图（ice quiver）**，并演示**箭图变异（quiver mutation）**。
+A browser-based tool for drawing **quivers** and **ice quivers** and exploring **quiver mutation**, path algebras and Auslander–Reiten quivers.
 
-无需构建、无依赖，可以直接访问上面的在线地址，也可以在本地用浏览器打开 `index.html`。
+No build step and no dependencies: use the online version above, or open `index.html` locally in a browser.
 
-## 功能
+## Features
 
-- **绘制箭图**：双击空白处添加顶点；用「添加箭头」工具从起点拖到终点（或依次点击起点、终点）画箭头，可画多重箭头；相反方向的箭头会自动抵消（箭图不含 1-圈和 2-圈）。
-- **冰箭图**：顶点可以设为冰冻顶点（方框显示）。冰冻顶点不能变异，冰冻顶点之间的箭头被忽略。支持一键「添加主系数」（i → i′）或「对偶系数」（i′ → i）。
-- **变异 μₖ**：点击顶点即可变异；支持输入变异序列（如 `1 2 1`）、随机变异、回到初始种子、撤销/重做。
-- **分步演示**：把变异拆成三步动画展示——补全路径 i → k → j、反转与 k 相连的箭头、删除 2-圈（以及冰冻顶点之间的箭头）。
-- **交换矩阵**：实时显示扩展交换矩阵 B̃（或完整斜对称矩阵），并可直接编辑。
-- **路代数**：计算路代数 kQ 的维数（Q 有向圈时为无穷维，可改用截断 kQ/R^L），以及每个顶点的不可分解投射模 P(i)、不可分解内射模 I(i)、单模 S(i) 的维数向量和维数；可在画布上标出维数向量，并查看 P(i) 的根层、I(i) 的基座层。
-- **Auslander–Reiten 箭图**：对无圈箭图的路代数 kQ，用编织（knitting）算法计算 AR 箭图，并判别底图类型（Dynkin / Euclidean / wild）。Dynkin 型（A/D/E）画出全部不可分解模（个数等于正根个数）；Euclidean 型还画出正则分支：用零根 δ、亏量和 Coxeter 变换求出例外管（rank 与 Ã_{p,q}: p, q；D̃ₙ: 2, 2, n−2；Ẽ₆/₇/₈: 2,3,3 / 2,3,4 / 2,3,5 一致）及齐次管；wild 型画出预投射、预内射分支的前若干层（正则分支为无穷多个 ℤA∞ 型分支，不画出）。可显示维数向量或 τ 轨道名称，点击模查看其维数向量、同构的投射/内射/单模、直接前驱和后继。
-- **有界导出范畴与丛范畴的 AR 箭图**：在 AR 箭图窗口中切换范畴。
-  - D^b(mod kQ)：按 Happel 定理，用 K₀ 中带符号的类沿 ℤQ 编织（τ⁻¹I(j) = P(j)[1]），Dynkin 型可选平移范围 [a, b]；其他类型画出含投射模的分支（预内射模[−1] ∪ 预投射模）及平移 [0] 的管。
-  - 丛范畴 C_Q = D^b/τ⁻¹[1]：Dynkin 型画出全部不可分解对象（不可分解模 + P(i)[1]，个数 = 正根个数 + n，与丛变量一一对应），并标出 τ⁻¹(P(i)[1]) = P(i) 的绕回；其他类型画出转移分支 … → I → P[1] → P → … 及管。
-- **示例**：A₃、A₄、D₄、三角循环、Kronecker、Markov、A₂/A₃ 加主系数、Gr(2,5)、Gr(2,6) 的冰箭图。
-- **导入/导出**：JSON、斜对称矩阵文本、TikZ 代码。
+- **Drawing quivers**: double-click an empty spot to add a vertex; with the **Arrow** tool, drag from the source to the target (or click the source, then the target) to draw an arrow. Multiple arrows are allowed; an arrow in the opposite direction cancels one (quivers have no 1-cycles or 2-cycles).
+- **Ice quivers**: vertices can be frozen (drawn as squares). Frozen vertices cannot be mutated, and arrows between frozen vertices are ignored. One click adds **principal coefficients** (i → i′) or **coprincipal coefficients** (i′ → i).
+- **Mutation μₖ**: click a vertex to mutate; run a mutation sequence (e.g. `1 2 1`), mutate at random, go back to the initial seed, undo/redo.
+- **Step-by-step mode**: shows a mutation in three animated steps: compose paths i → k → j, reverse the arrows incident to k, remove 2-cycles (and arrows between frozen vertices).
+- **Exchange matrix**: the extended exchange matrix B̃ (or the full skew-symmetric matrix) is shown live and can be edited directly.
+- **Path algebra**: the dimension of the path algebra kQ (infinite if Q has an oriented cycle; the truncation kQ/R^L is available instead), and the dimension vectors and dimensions of the indecomposable projectives P(i), injectives I(i) and simples S(i). A module's dimension vector can be shown on the canvas, together with the radical layers of P(i) or the socle layers of I(i).
+- **Auslander–Reiten quiver**: for the path algebra kQ of an acyclic quiver, the AR quiver is computed by knitting, and each component of the underlying graph is classified as Dynkin, Euclidean or wild.
+  - Dynkin types (A/D/E): all indecomposable modules (as many as positive roots).
+  - Euclidean types: also the regular components. The exceptional tubes are found from the null root δ, the defect and the Coxeter transformation; their ranks agree with the known values (Ã_{p,q}: p, q; D̃ₙ: 2, 2, n−2; Ẽ₆/₇/₈: 2,3,3 / 2,3,4 / 2,3,5). A homogeneous tube is drawn as well.
+  - Wild types: the first layers of the preprojective and preinjective components (the regular components, infinitely many of type ℤA∞, are not drawn).
+  - Labels can be dimension vectors or τ-orbit names. Clicking a module shows its dimension vector, the projective / injective / simple module it is isomorphic to, and its direct predecessors and successors.
+- **AR quivers of the derived and cluster categories**: switch the category in the AR quiver window.
+  - D^b(mod kQ): following Happel's theorem, ℤQ is knitted with signed classes in K₀ (τ⁻¹I(j) = P(j)[1]). For Dynkin types a range of shifts [a, b] can be chosen; for other types, the component containing the projectives (preinjectives[−1] ∪ preprojectives) is drawn, together with the tubes in degree [0].
+  - Cluster category C_Q = D^b/τ⁻¹[1]: for Dynkin types, all indecomposable objects (indecomposable modules and the P(i)[1]; positive roots + n of them, in bijection with the cluster variables), with the wrap-around τ⁻¹(P(i)[1]) = P(i) marked; for other types, the transjective component … → I → P[1] → P → … together with the tubes.
+- **Proof panel**: a panel in the bottom-right corner explains every step that changes the picture.
+  - Each edit is explained in terms of the matrix B (e.g. drawing an arrow sets b[i,j] and b[j,i] by skew-symmetry).
+  - Each mutation μₖ is derived through the three steps (compose, reverse, cancel), then checked entry by entry against the matrix formula.
+  - Highlighting a module's dimension vector shows the count of paths by length.
+  - The AR quiver window has its own Proof panel: the classification, the projectives and injectives, every mesh computation (τ⁻¹X = Σ middle terms − X), where each τ-orbit stops or the shift changes, the derivation of the tubes, and the identifications in the cluster category.
+- **Examples**: A₃, A₄, D₄, E₆, D̃₄, Ã₂, an oriented 3-cycle, the Kronecker and Markov quivers, A₂/A₃ with principal coefficients, and the ice quivers of Gr(2,5) and Gr(2,6).
+- **Import / export**: JSON, skew-symmetric matrix text, and TikZ code.
 
-## 变异规则
+## Mutation rule
 
-在可变顶点 k 处：
+At a mutable vertex k:
 
 ```
-b'_ij = -b_ij                                  若 i = k 或 j = k
-b'_ij = b_ij + (|b_ik| b_kj + b_ik |b_kj|) / 2  否则
+b'_ij = -b_ij                                  if i = k or j = k
+b'_ij = b_ij + (|b_ik| b_kj + b_ik |b_kj|) / 2  otherwise
 ```
 
-冰箭图中冰冻顶点之间的 b'_ij 恒为 0。
+In an ice quiver, b'_ij is always 0 between frozen vertices.
 
-## 路代数的约定
+## Path algebra conventions
 
-用箭图表示的语言：P(i)_j 的基为从 i 到 j 的路，I(i)_j 的基为从 j 到 i 的路，S(i) 只在 i 处为 k。长度为 l 的 i → j 的路的条数为 (A^l)_ij，其中 A 是箭头计数矩阵；冰箭图默认包含冰冻顶点，也可以只用可变部分。
+In the language of quiver representations: P(i)_j has a basis of the paths from i to j, I(i)_j has a basis of the paths from j to i, and S(i) is k at vertex i and 0 elsewhere. The number of paths of length l from i to j is (A^l)_ij, where A is the arrow-count matrix. For ice quivers the frozen vertices are included by default; you can restrict to the mutable part instead.
 
-## 文件
+## Files
 
-- `index.html`、`style.css`、`app.js`：页面与交互
-- `quiver-core.js`：变异与路代数的数学核心（浏览器与 Node 通用）
-- `ar-core.js`：AR 箭图（编织算法、底图分类、正则分支的管、导出范畴与丛范畴、布局）
-- `tests/core.test.js`、`tests/ar.test.js`：测试，运行 `node tests/core.test.js && node tests/ar.test.js`
+- `index.html`, `style.css`, `app.js`: page and interaction
+- `quiver-core.js`: mathematical core for mutation and path algebras (works in the browser and in Node)
+- `ar-core.js`: AR quivers (knitting, classification, tubes of the regular components, derived and cluster categories, layout)
+- `tests/core.test.js`, `tests/ar.test.js`: tests; run `node tests/core.test.js && node tests/ar.test.js`

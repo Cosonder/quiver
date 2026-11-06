@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quiver Mutation</title>
   <meta name="description" content="Draw quivers and ice quivers in the browser and explore quiver mutation, path algebras and Auslander–Reiten quivers.">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <header class="topbar">
@@ -121,6 +121,10 @@
           <button id="stage-play">Play</button>
           <button id="stage-close">Done</button>
         </div>
+      </div>
+      <div class="proof" id="proof">
+        <div class="proof-head"><b>Proof</b><span class="proof-sub">each step explained</span><span class="spacer"></span><button id="proof-clear">Clear</button><button id="proof-toggle" aria-expanded="true">Hide</button></div>
+        <ol class="proof-list" id="proof-list" aria-live="polite"></ol>
       </div>
       <div class="legend">
         <span><svg width="18" height="18"><circle cx="9" cy="9" r="7" class="lg-mut"/></svg>Mutable vertex</span>
@@ -242,15 +246,21 @@
         <button id="ar-zoom-fit">Fit</button>
         <button id="ar-zoom-in" aria-label="Zoom in">+</button>
       </div>
-      <div class="ar-scroll" id="ar-scroll">
-        <svg id="ar-canvas" role="img" aria-label="AR quiver">
-          <defs>
-            <marker id="ar-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah base"/></marker>
-            <marker id="ar-ah-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah orange"/></marker>
-          </defs>
-          <g id="ar-edges"></g>
-          <g id="ar-nodes"></g>
-        </svg>
+      <div class="ar-stage">
+        <div class="ar-scroll" id="ar-scroll">
+          <svg id="ar-canvas" role="img" aria-label="AR quiver">
+            <defs>
+              <marker id="ar-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah base"/></marker>
+              <marker id="ar-ah-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah orange"/></marker>
+            </defs>
+            <g id="ar-edges"></g>
+            <g id="ar-nodes"></g>
+          </svg>
+        </div>
+        <div class="proof ar-proof" id="ar-proof">
+          <div class="proof-head"><b>Proof</b><span class="proof-sub">how this picture is obtained</span><span class="spacer"></span><button id="ar-proof-toggle" aria-expanded="true">Hide</button></div>
+          <ol class="proof-list" id="ar-proof-list"></ol>
+        </div>
       </div>
       <div class="ar-legend">
         <span><i class="sw proj"></i>Projective</span>
@@ -275,6 +285,7 @@
         <li><b>Arrow</b>: drag from the source to the target, or click the source and then the target. Repeat to get multiple arrows; an arrow in the opposite direction cancels one (quivers have no 2-cycles).</li>
         <li>With the <b>Delete</b> tool, clicking an arrow removes one arrow and clicking a vertex removes the vertex.</li>
         <li>With the <b>Select</b> tool, drag vertices to move them; <b>double-click a vertex</b> to mutate there.</li>
+        <li>The <b>Proof</b> panel in the bottom-right corner explains every step: each edit, each mutation (the three combinatorial steps checked against the matrix formula) and each dimension vector you highlight. The AR quiver window has its own Proof panel showing how the picture is computed.</li>
         <li>The <b>Path algebra kQ</b> panel on the right gives the dimension of kQ (or of the truncation kQ/R<sup>L</sup>) and the dimension vectors of the indecomposable projectives P(i), injectives I(i) and simples S(i). Click a row to show the dimension vector on the canvas and the radical / socle layers.</li>
         <li><b>AR quiver</b>: for the path algebra kQ of an acyclic quiver, the Auslander–Reiten quiver is computed by knitting. Dynkin types (A/D/E) give all indecomposables; Euclidean types also show the regular components (exceptional and homogeneous tubes); wild types show the first layers of the preprojective and preinjective components. In the window you can also switch to the bounded derived category D<sup>b</sup>(mod kQ) (ℤQ, with a chosen range of shifts) and the cluster category C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1] (all objects for Dynkin types, in bijection with cluster variables).</li>
       </ul>
@@ -296,8 +307,8 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="quiver-core.js?v=7"></script>
-  <script src="ar-core.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="quiver-core.js?v=8"></script>
+  <script src="ar-core.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
