@@ -34,7 +34,7 @@
   /** 矩阵变异公式 */
   function mutate(B, k, frozen) {
     frozen = frozen || [];
-    if (frozen[k]) throw new Error('不能在冰冻顶点处变异');
+    if (frozen[k]) throw new Error('Cannot mutate at a frozen vertex');
     const n = B.length;
     const C = zeros(n);
     for (let i = 0; i < n; i++) {
@@ -119,20 +119,20 @@
     const A4 = toCounts(mutate(B, k, frozen));
 
     return [
-      { A: A0, hl: hl0, color: 'blue', title: '原箭图',
-        text: '在顶点 k 处变异。蓝色为与 k 相连的箭头。' },
-      { A: A1, hl: hl1, color: 'green', title: '第 1 步：补全路径',
+      { A: A0, hl: hl0, color: 'blue', title: 'Original quiver',
+        text: 'Mutating at vertex k. Arrows incident to k are shown in blue.' },
+      { A: A1, hl: hl1, color: 'green', title: 'Step 1: compose paths',
         text: added > 0
-          ? '对每条路径 i → k → j，添加一条箭头 i → j（绿色，共 ' + added + ' 条）。'
-          : '没有经过 k 的路径 i → k → j，这一步不添加箭头。' },
-      { A: A2, hl: hl2, color: 'orange', title: '第 2 步：反转',
-        text: '把所有与 k 相连的箭头反向（橙色）。' },
-      { A: A2, hl: hl3, color: 'red', title: '第 3 步：删除 2-圈',
+          ? 'For each path i → k → j, add an arrow i → j (green, ' + added + ' in total).'
+          : 'There is no path i → k → j through k, so no arrows are added.' },
+      { A: A2, hl: hl2, color: 'orange', title: 'Step 2: reverse',
+        text: 'Reverse all arrows incident to k (orange).' },
+      { A: A2, hl: hl3, color: 'red', title: 'Step 3: remove 2-cycles',
         text: cancelled > 0
-          ? '成对删除方向相反的箭头（2-圈），并删除冰冻顶点之间的箭头（红色，共 ' + cancelled + ' 条）。'
-          : '没有 2-圈需要删除。' },
-      { A: A4, hl: zeros(n), color: 'none', title: '结果 μ_k(Q)',
-        text: '变异完成。再次在 k 处变异会回到原箭图（μ_k 是对合）。' }
+          ? 'Remove pairs of opposite arrows (2-cycles) and arrows between frozen vertices (red, ' + cancelled + ' in total).'
+          : 'There are no 2-cycles to remove.' },
+      { A: A4, hl: zeros(n), color: 'none', title: 'Result μ_k(Q)',
+        text: 'Mutation complete. Mutating at k again returns the original quiver (μ_k is an involution).' }
     ];
   }
 

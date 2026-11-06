@@ -1,96 +1,97 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quiver Mutation</title>
-  <meta name="description" content="在浏览器中绘制箭图（quiver）与冰箭图（ice quiver），并演示箭图变异（quiver mutation）。">
-  <link rel="stylesheet" href="style.css">
+  <meta name="description" content="Draw quivers and ice quivers in the browser and explore quiver mutation, path algebras and Auslander–Reiten quivers.">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <h1>Quiver Mutation</h1>
-      <span class="subtitle">箭图 · 冰箭图 · 变异演示</span>
+      <span class="subtitle">Quivers · Ice quivers · Mutation</span>
     </div>
     <div class="top-actions">
-      <button id="btn-undo" title="撤销 (Ctrl+Z)">↶ 撤销</button>
-      <button id="btn-redo" title="重做 (Ctrl+Y)">↷ 重做</button>
-      <button id="btn-io" title="导入 / 导出">⇅ 导入/导出</button>
-      <button id="btn-help" title="帮助">? 帮助</button>
+      <button id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button id="btn-redo" title="Redo (Ctrl+Y)">↷ Redo</button>
+      <button id="btn-io" title="Import / export">⇅ Import/Export</button>
+      <button id="btn-help" title="Help">? Help</button>
     </div>
   </header>
 
   <main class="layout">
-    <!-- 左侧：工具 -->
+    <!-- Left: tools -->
     <aside class="panel left">
       <section>
-        <h2>工具</h2>
-        <div class="tools" role="radiogroup" aria-label="编辑工具">
-          <button class="tool" data-mode="move" title="选择 / 拖动 (S)"><span class="ico">✥</span>选择/移动<kbd>S</kbd></button>
-          <button class="tool" data-mode="vertex" title="添加顶点 (V)，Shift+点击添加冰冻顶点"><span class="ico">○</span>添加顶点<kbd>V</kbd></button>
-          <button class="tool" data-mode="frozenVertex" title="添加冰冻顶点 (I)"><span class="ico">□</span>冰冻顶点<kbd>I</kbd></button>
-          <button class="tool" data-mode="arrow" title="添加箭头 (A)：从起点拖到终点"><span class="ico">→</span>添加箭头<kbd>A</kbd></button>
-          <button class="tool" data-mode="freeze" title="切换冰冻/可变 (F)"><span class="ico">❄</span>冰冻切换<kbd>F</kbd></button>
-          <button class="tool" data-mode="delete" title="删除顶点或箭头 (D)"><span class="ico">✕</span>删除<kbd>D</kbd></button>
-          <button class="tool tool-mutate" data-mode="mutate" title="点击顶点进行变异 (M)"><span class="ico">μ</span>变异<kbd>M</kbd></button>
+        <h2>Tools</h2>
+        <div class="tools" role="radiogroup" aria-label="Editing tools">
+          <button class="tool" data-mode="move" title="Select / move (S)"><span class="ico">✥</span>Select<kbd>S</kbd></button>
+          <button class="tool" data-mode="vertex" title="Add vertex (V); Shift+click adds a frozen vertex"><span class="ico">○</span>Vertex<kbd>V</kbd></button>
+          <button class="tool" data-mode="frozenVertex" title="Add frozen vertex (I)"><span class="ico">□</span>Frozen<kbd>I</kbd></button>
+          <button class="tool" data-mode="arrow" title="Add arrow (A): drag from source to target"><span class="ico">→</span>Arrow<kbd>A</kbd></button>
+          <button class="tool" data-mode="freeze" title="Toggle frozen / mutable (F)"><span class="ico">❄</span>Freeze<kbd>F</kbd></button>
+          <button class="tool" data-mode="delete" title="Delete a vertex or an arrow (D)"><span class="ico">✕</span>Delete<kbd>D</kbd></button>
+          <button class="tool tool-mutate" data-mode="mutate" title="Click a vertex to mutate (M)"><span class="ico">μ</span>Mutate<kbd>M</kbd></button>
         </div>
         <p class="hint" id="mode-hint"></p>
       </section>
 
       <section>
-        <h2>变异</h2>
-        <label class="check"><input type="checkbox" id="opt-steps"> 分步演示变异过程</label>
+        <h2>Mutation</h2>
+        <label class="check"><input type="checkbox" id="opt-steps"> Show mutation step by step</label>
         <div class="row">
-          <input id="seq-input" type="text" placeholder="变异序列，如 1 2 1" aria-label="变异序列">
-          <button id="btn-seq">执行</button>
+          <input id="seq-input" type="text" placeholder="Sequence, e.g. 1 2 1" aria-label="Mutation sequence">
+          <button id="btn-seq">Run</button>
         </div>
         <div class="row">
-          <button id="btn-random">随机变异</button>
-          <button id="btn-seed">回到初始种子</button>
+          <button id="btn-random">Random</button>
+          <button id="btn-seed">Back to initial seed</button>
         </div>
         <div class="seq-log" id="seq-log"></div>
       </section>
 
       <section>
-        <h2>冰箭图</h2>
+        <h2>Ice quiver</h2>
         <div class="row wrap">
-          <button id="btn-principal" title="为每个可变顶点 i 添加冰冻顶点 i′ 和箭头 i → i′">添加主系数</button>
-          <button id="btn-coprincipal" title="为每个可变顶点 i 添加冰冻顶点 i′ 和箭头 i′ → i">添加对偶系数</button>
-          <button id="btn-unfreeze">解冻全部</button>
-          <button id="btn-remove-frozen">删除冰冻顶点</button>
+          <button id="btn-principal" title="For each mutable vertex i, add a frozen vertex i′ and an arrow i → i′">Principal coefficients</button>
+          <button id="btn-coprincipal" title="For each mutable vertex i, add a frozen vertex i′ and an arrow i′ → i">Coprincipal coefficients</button>
+          <button id="btn-unfreeze">Unfreeze all</button>
+          <button id="btn-remove-frozen">Remove frozen vertices</button>
         </div>
       </section>
 
       <section>
-        <h2>示例</h2>
-        <select id="preset" aria-label="示例箭图">
-          <option value="">— 选择示例 —</option>
-          <option value="A3">A₃（线性）</option>
-          <option value="A4">A₄（交错定向）</option>
+        <h2>Examples</h2>
+        <select id="preset" aria-label="Example quivers">
+          <option value="">— Choose an example —</option>
+          <option value="A3">A₃ (linear)</option>
+          <option value="A4">A₄ (alternating)</option>
           <option value="D4">D₄</option>
           <option value="E6">E₆</option>
-          <option value="A2tilde">Ã₂（非定向三角，无限表示型）</option>
-          <option value="cyc3">三角循环（A₃ 的变异）</option>
-          <option value="kronecker">Kronecker 箭图</option>
-          <option value="markov">Markov 箭图</option>
-          <option value="A2prin">A₂ + 主系数（冰箭图）</option>
-          <option value="A3prin">A₃ + 主系数（冰箭图）</option>
-          <option value="gr25">Gr(2,5)（五边形三角剖分，冰箭图）</option>
-          <option value="gr26">Gr(2,6)（六边形三角剖分，冰箭图）</option>
-          <option value="empty">清空</option>
+          <option value="D4tilde">D̃₄ (four subspaces, infinite type)</option>
+          <option value="A2tilde">Ã₂ (acyclic triangle, infinite type)</option>
+          <option value="cyc3">Oriented 3-cycle (a mutation of A₃)</option>
+          <option value="kronecker">Kronecker quiver</option>
+          <option value="markov">Markov quiver</option>
+          <option value="A2prin">A₂ + principal coefficients (ice)</option>
+          <option value="A3prin">A₃ + principal coefficients (ice)</option>
+          <option value="gr25">Gr(2,5) (pentagon triangulation, ice)</option>
+          <option value="gr26">Gr(2,6) (hexagon triangulation, ice)</option>
+          <option value="empty">Empty</option>
         </select>
         <div class="row">
-          <button id="btn-layout">圆形排布</button>
-          <button id="btn-fit">适应画布</button>
-          <button id="btn-clear">清空画布</button>
+          <button id="btn-layout">Circle layout</button>
+          <button id="btn-fit">Fit</button>
+          <button id="btn-clear">Clear</button>
         </div>
       </section>
     </aside>
 
-    <!-- 中间：画布 -->
+    <!-- Center: canvas -->
     <section class="canvas-wrap">
-      <svg id="canvas" aria-label="箭图画布" role="img">
+      <svg id="canvas" aria-label="Quiver canvas" role="img">
         <defs>
           <marker id="ah-base" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah base"/></marker>
           <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah blue"/></marker>
@@ -104,8 +105,8 @@
         <g id="layer-vertices"></g>
       </svg>
       <div class="empty-hint" id="empty-hint">
-        <p><b>双击</b>空白处添加顶点，选择 <b>添加箭头</b> 工具后从一个顶点拖到另一个顶点画箭头。</p>
-        <p>或者从左侧 <b>示例</b> 中选择一个箭图。</p>
+        <p><b>Double-click</b> an empty spot to add a vertex. With the <b>Arrow</b> tool, drag from one vertex to another to draw an arrow.</p>
+        <p>Or pick a quiver from <b>Examples</b> on the left.</p>
       </div>
 
       <div class="stage-bar" id="stage-bar" hidden>
@@ -114,79 +115,80 @@
           <div class="stage-desc" id="stage-desc"></div>
         </div>
         <div class="stage-controls">
-          <button id="stage-prev" aria-label="上一步">◀</button>
+          <button id="stage-prev" aria-label="Previous step">◀</button>
           <span id="stage-count"></span>
-          <button id="stage-next" aria-label="下一步">▶</button>
-          <button id="stage-play">自动播放</button>
-          <button id="stage-close">完成</button>
+          <button id="stage-next" aria-label="Next step">▶</button>
+          <button id="stage-play">Play</button>
+          <button id="stage-close">Done</button>
         </div>
       </div>
       <div class="legend">
-        <span><svg width="18" height="18"><circle cx="9" cy="9" r="7" class="lg-mut"/></svg>可变顶点</span>
-        <span><svg width="18" height="18"><rect x="2" y="2" width="14" height="14" class="lg-frz"/></svg>冰冻顶点</span>
+        <span><svg width="18" height="18"><circle cx="9" cy="9" r="7" class="lg-mut"/></svg>Mutable vertex</span>
+        <span><svg width="18" height="18"><rect x="2" y="2" width="14" height="14" class="lg-frz"/></svg>Frozen vertex</span>
       </div>
     </section>
 
-    <!-- 右侧：矩阵、信息 -->
+    <!-- Right: matrix and information -->
     <aside class="panel right">
       <section id="sel-section" hidden>
-        <h2>选中顶点</h2>
+        <h2>Selected vertex</h2>
         <div class="row">
-          <label for="sel-label">标签</label>
+          <label for="sel-label">Label</label>
           <input id="sel-label" type="text" maxlength="8">
         </div>
-        <label class="check"><input type="checkbox" id="sel-frozen"> 冰冻顶点</label>
+        <label class="check"><input type="checkbox" id="sel-frozen"> Frozen</label>
         <div class="row">
-          <button id="sel-mutate">在此变异 μ</button>
-          <button id="sel-delete">删除</button>
+          <button id="sel-mutate">Mutate here μ</button>
+          <button id="sel-delete">Delete</button>
         </div>
       </section>
 
       <section>
-        <h2>交换矩阵</h2>
-        <label class="check"><input type="checkbox" id="opt-full"> 显示完整斜对称矩阵</label>
+        <h2>Exchange matrix</h2>
+        <label class="check"><input type="checkbox" id="opt-full"> Show the full skew-symmetric matrix</label>
         <p class="hint" id="matrix-caption"></p>
         <div class="matrix-scroll"><table id="matrix" class="matrix"></table></div>
-        <p class="hint">可直接编辑矩阵元素，b<sub>ij</sub> = i→j 箭头数 − j→i 箭头数。</p>
+        <p class="hint">Entries are editable: b<sub>ij</sub> = #arrows i→j − #arrows j→i.</p>
       </section>
 
       <section id="pa-section">
-        <h2>路代数 kQ</h2>
+        <h2>Path algebra kQ</h2>
         <div class="row">
-          <select id="pa-rel" aria-label="关系">
-            <option value="none">无关系：kQ</option>
-            <option value="trunc">截断：kQ / R^L</option>
+          <select id="pa-rel" aria-label="Relations">
+            <option value="none">No relations: kQ</option>
+            <option value="trunc">Truncated: kQ / R^L</option>
           </select>
           <label for="pa-L" id="pa-L-label" hidden>L =</label>
           <input id="pa-L" type="number" min="1" max="30" step="1" value="2" hidden>
         </div>
-        <label class="check"><input type="checkbox" id="pa-mutable"> 只用可变部分（忽略冰冻顶点）</label>
+        <label class="check"><input type="checkbox" id="pa-mutable"> Mutable part only (ignore frozen vertices)</label>
         <div id="pa-summary" class="pa-summary"></div>
         <div class="row">
-          <select id="pa-kind" aria-label="模的类型">
-            <option value="P">不可分解投射模 P(i)</option>
-            <option value="I">不可分解内射模 I(i)</option>
-            <option value="S">单模 S(i)</option>
+          <select id="pa-kind" aria-label="Module type">
+            <option value="P">Indecomposable projectives P(i)</option>
+            <option value="I">Indecomposable injectives I(i)</option>
+            <option value="S">Simples S(i)</option>
           </select>
         </div>
         <div class="matrix-scroll"><table id="pa-table" class="dimtable"></table></div>
-        <p class="hint">点击一行，在画布上标出该模的维数向量。</p>
+        <p class="hint">Click a row to show that module's dimension vector on the canvas.</p>
         <div id="pa-layers" class="pa-layers"></div>
         <div class="ar-box">
-          <div class="ar-head">Auslander–Reiten 箭图</div>
+          <div class="ar-head">Auslander–Reiten quiver</div>
           <div id="ar-summary" class="hint"></div>
-          <button id="btn-ar" class="primary">查看 AR 箭图</button>
+          <button id="btn-ar" class="primary">Show AR quiver</button>
+          <p class="hint">In the window you can switch between mod kQ, the bounded derived category D<sup>b</sup>(mod kQ) and the cluster category C<sub>Q</sub>.</p>
         </div>
         <details class="pa-conv">
-          <summary>约定</summary>
-          <p>以箭图表示的语言：P(i)<sub>j</sub> 的基为从 i 到 j 的路（顶为 S(i)），I(i)<sub>j</sub> 的基为从 j 到 i 的路（基座为 S(i)），S(i) 只在顶点 i 处为 k。
-            dim kQ = 全部路的条数（含长度为 0 的平凡路 e<sub>i</sub>）。R 为箭头生成的理想，kQ / R^L 表示把长度 ≥ L 的路都设为 0。
-            Q 含有向圈时 kQ 是无穷维的，可改用截断。</p>
+          <summary>Conventions</summary>
+          <p>In the language of quiver representations: P(i)<sub>j</sub> has a basis of the paths from i to j (top S(i)), I(i)<sub>j</sub> has a basis of the paths from j to i (socle S(i)), and S(i) is k at vertex i and 0 elsewhere.
+            dim kQ is the number of all paths, including the trivial paths e<sub>i</sub> of length 0. R is the ideal generated by the arrows; kQ / R^L sets all paths of length ≥ L to zero.
+            If Q has an oriented cycle, kQ is infinite-dimensional; use truncation instead.</p>
         </details>
       </section>
 
       <section>
-        <h2>统计</h2>
+        <h2>Statistics</h2>
         <dl class="stats" id="stats"></dl>
       </section>
     </aside>
@@ -194,18 +196,18 @@
 
   <dialog id="dlg-io">
     <form method="dialog" class="dlg">
-      <h2>导入 / 导出</h2>
+      <h2>Import / Export</h2>
       <div class="row wrap">
-        <button type="button" id="io-json">导出 JSON</button>
-        <button type="button" id="io-tikz">导出 TikZ</button>
-        <button type="button" id="io-matrix">导出矩阵</button>
-        <button type="button" id="io-copy">复制</button>
+        <button type="button" id="io-json">Export JSON</button>
+        <button type="button" id="io-tikz">Export TikZ</button>
+        <button type="button" id="io-matrix">Export matrix</button>
+        <button type="button" id="io-copy">Copy</button>
       </div>
-      <textarea id="io-text" spellcheck="false" rows="14" aria-label="导入导出内容"></textarea>
-      <p class="hint">导入支持本页导出的 JSON，或斜对称整数矩阵（每行一行，空格分隔；可在首行写 <code>frozen: 4 5</code> 指定冰冻顶点编号）。</p>
+      <textarea id="io-text" spellcheck="false" rows="14" aria-label="Import / export text"></textarea>
+      <p class="hint">Import accepts JSON exported from this page, or a skew-symmetric integer matrix (one row per line, space-separated; an optional first line <code>frozen: 4 5</code> marks frozen vertices by number).</p>
       <div class="row end">
-        <button type="button" id="io-import" class="primary">导入</button>
-        <button value="close">关闭</button>
+        <button type="button" id="io-import" class="primary">Import</button>
+        <button value="close">Close</button>
       </div>
     </form>
   </dialog>
@@ -213,26 +215,35 @@
   <dialog id="dlg-ar" class="dlg-wide">
     <div class="dlg ar-dlg">
       <div class="ar-top">
-        <h2>Auslander–Reiten 箭图</h2>
-        <form method="dialog"><button aria-label="关闭">关闭</button></form>
+        <h2>Auslander–Reiten quiver</h2>
+        <form method="dialog"><button aria-label="Close">Close</button></form>
       </div>
       <p id="ar-desc" class="ar-desc"></p>
       <div class="row wrap ar-controls">
-        <label>标注
-          <select id="ar-label">
-            <option value="dim">维数向量</option>
-            <option value="name">τ 轨道名称</option>
+        <label>Category
+          <select id="ar-cat">
+            <option value="mod">mod kQ</option>
+            <option value="derived">Bounded derived category D^b(mod kQ)</option>
+            <option value="cluster">Cluster category C_Q</option>
           </select>
         </label>
-        <label class="check"><input type="checkbox" id="ar-tau" checked> 显示 τ（虚线）</label>
-        <label id="ar-layers-wrap">层数 <input id="ar-layers" type="number" min="1" max="12" value="4"></label>
+        <label id="ar-shift-wrap" hidden>Shifts [<input id="ar-dmin" type="number" min="-5" max="5" value="0">, <input id="ar-dmax" type="number" min="-5" max="5" value="1">]</label>
+        <label>Labels
+          <select id="ar-label">
+            <option value="dim">Dimension vectors</option>
+            <option value="name">τ-orbit names</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="ar-tau" checked> Show τ (dashed)</label>
+        <label class="check" id="ar-reg-wrap"><input type="checkbox" id="ar-reg" checked> Show regular components (tubes)</label>
+        <label id="ar-layers-wrap" title="Number of layers of the preprojective / preinjective components, and the quasi-length shown in tubes">Layers <input id="ar-layers" type="number" min="1" max="12" value="4"></label>
         <span class="spacer"></span>
-        <button id="ar-zoom-out" aria-label="缩小">−</button>
-        <button id="ar-zoom-fit">适应</button>
-        <button id="ar-zoom-in" aria-label="放大">＋</button>
+        <button id="ar-zoom-out" aria-label="Zoom out">−</button>
+        <button id="ar-zoom-fit">Fit</button>
+        <button id="ar-zoom-in" aria-label="Zoom in">+</button>
       </div>
       <div class="ar-scroll" id="ar-scroll">
-        <svg id="ar-canvas" role="img" aria-label="AR 箭图">
+        <svg id="ar-canvas" role="img" aria-label="AR quiver">
           <defs>
             <marker id="ar-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah base"/></marker>
             <marker id="ar-ah-hl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah orange"/></marker>
@@ -242,48 +253,51 @@
         </svg>
       </div>
       <div class="ar-legend">
-        <span><i class="sw proj"></i>投射</span>
-        <span><i class="sw inj"></i>内射</span>
-        <span><i class="sw projinj"></i>投射-内射</span>
-        <span><i class="sw simple"></i>单模（加粗）</span>
+        <span><i class="sw proj"></i>Projective</span>
+        <span><i class="sw inj"></i>Injective</span>
+        <span><i class="sw projinj"></i>Projective-injective</span>
+        <span><i class="sw simple"></i>Simple (bold)</span>
+        <span><i class="sw regular"></i>Regular (tube)</span>
+        <span><i class="sw shiftp"></i>P(i)[1]</span>
+        <span><i class="sw odd"></i>Odd shift</span>
         <span id="ar-order" class="ar-order"></span>
       </div>
-      <div id="ar-info" class="ar-info">点击一个模查看详情；同时高亮它的直接前驱与后继。</div>
+      <div id="ar-info" class="ar-info">Click a module for details; its direct predecessors and successors are highlighted.</div>
     </div>
   </dialog>
 
   <dialog id="dlg-help">
     <form method="dialog" class="dlg help">
-      <h2>使用说明</h2>
-      <h3>绘制</h3>
+      <h2>Help</h2>
+      <h3>Drawing</h3>
       <ul>
-        <li><b>双击</b>空白处添加可变顶点；<b>Shift + 双击</b>添加冰冻顶点（方框）。</li>
-        <li><b>添加箭头</b>：从起点按住拖到终点，或先点起点再点终点。重复画可得多重箭头；画相反方向的箭头会互相抵消（箭图不含 2-圈）。</li>
-        <li><b>删除</b>工具点击箭头每次删除一条，点击顶点删除该顶点。</li>
-        <li>在 <b>选择/移动</b> 工具下拖动顶点，<b>双击顶点</b>即在该点变异。</li>
-        <li>右侧 <b>路代数 kQ</b> 面板给出 kQ（或截断 kQ/R<sup>L</sup>）的维数，以及不可分解投射模 P(i)、内射模 I(i)、单模 S(i) 的维数向量；点击一行可在画布上标出维数向量，并查看根层 / 基座层。</li>
-        <li><b>AR 箭图</b>：对无圈箭图的路代数 kQ，用编织算法计算 Auslander–Reiten 箭图。Dynkin 型（A/D/E）给出全部不可分解模；Euclidean / wild 型给出预投射、预内射分支的前若干层。</li>
+        <li><b>Double-click</b> an empty spot to add a mutable vertex; <b>Shift + double-click</b> adds a frozen vertex (square).</li>
+        <li><b>Arrow</b>: drag from the source to the target, or click the source and then the target. Repeat to get multiple arrows; an arrow in the opposite direction cancels one (quivers have no 2-cycles).</li>
+        <li>With the <b>Delete</b> tool, clicking an arrow removes one arrow and clicking a vertex removes the vertex.</li>
+        <li>With the <b>Select</b> tool, drag vertices to move them; <b>double-click a vertex</b> to mutate there.</li>
+        <li>The <b>Path algebra kQ</b> panel on the right gives the dimension of kQ (or of the truncation kQ/R<sup>L</sup>) and the dimension vectors of the indecomposable projectives P(i), injectives I(i) and simples S(i). Click a row to show the dimension vector on the canvas and the radical / socle layers.</li>
+        <li><b>AR quiver</b>: for the path algebra kQ of an acyclic quiver, the Auslander–Reiten quiver is computed by knitting. Dynkin types (A/D/E) give all indecomposables; Euclidean types also show the regular components (exceptional and homogeneous tubes); wild types show the first layers of the preprojective and preinjective components. In the window you can also switch to the bounded derived category D<sup>b</sup>(mod kQ) (ℤQ, with a chosen range of shifts) and the cluster category C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1] (all objects for Dynkin types, in bijection with cluster variables).</li>
       </ul>
-      <h3>变异 μ<sub>k</sub></h3>
+      <h3>Mutation μ<sub>k</sub></h3>
       <ol>
-        <li>对每条路径 i → k → j 添加箭头 i → j；</li>
-        <li>反转所有与 k 相连的箭头；</li>
-        <li>删除所有 2-圈。</li>
+        <li>For each path i → k → j, add an arrow i → j;</li>
+        <li>reverse all arrows incident to k;</li>
+        <li>remove all 2-cycles.</li>
       </ol>
-      <p>矩阵形式：b′<sub>ij</sub> = −b<sub>ij</sub>（i = k 或 j = k），否则 b′<sub>ij</sub> = b<sub>ij</sub> + (|b<sub>ik</sub>|b<sub>kj</sub> + b<sub>ik</sub>|b<sub>kj</sub>|)/2。</p>
-      <h3>冰箭图</h3>
-      <p>冰箭图中部分顶点是<b>冰冻顶点</b>（方框）：不能在冰冻顶点处变异，冰冻顶点之间的箭头被忽略，变异后也会被删除。交换矩阵 B̃ 只保留可变顶点对应的列（行为全部顶点）。
-        「添加主系数」为每个可变顶点 i 添加冰冻顶点 i′ 和箭头 i → i′，此时冰冻部分的列给出 c-向量。</p>
-      <h3>快捷键</h3>
-      <p><kbd>S</kbd> 选择 · <kbd>V</kbd> 顶点 · <kbd>I</kbd> 冰冻顶点 · <kbd>A</kbd> 箭头 · <kbd>F</kbd> 冰冻切换 · <kbd>D</kbd> 删除 · <kbd>M</kbd> 变异 · <kbd>Delete</kbd> 删除选中 · <kbd>Ctrl+Z / Ctrl+Y</kbd> 撤销/重做 · 分步演示时 <kbd>←</kbd>/<kbd>→</kbd> 切换步骤</p>
-      <div class="row end"><button value="close" class="primary">知道了</button></div>
+      <p>Matrix form: b′<sub>ij</sub> = −b<sub>ij</sub> if i = k or j = k, and otherwise b′<sub>ij</sub> = b<sub>ij</sub> + (|b<sub>ik</sub>|b<sub>kj</sub> + b<sub>ik</sub>|b<sub>kj</sub>|)/2.</p>
+      <h3>Ice quivers</h3>
+      <p>In an ice quiver some vertices are <b>frozen</b> (squares): you cannot mutate at a frozen vertex, and arrows between frozen vertices are ignored (and removed after mutation). The exchange matrix B̃ keeps only the columns of mutable vertices (its rows are all vertices).
+        “Principal coefficients” adds a frozen vertex i′ and an arrow i → i′ for each mutable vertex i; the columns of the frozen block then give the c-vectors.</p>
+      <h3>Keyboard shortcuts</h3>
+      <p><kbd>S</kbd> select · <kbd>V</kbd> vertex · <kbd>I</kbd> frozen vertex · <kbd>A</kbd> arrow · <kbd>F</kbd> freeze · <kbd>D</kbd> delete · <kbd>M</kbd> mutate · <kbd>Delete</kbd> delete selection · <kbd>Ctrl+Z / Ctrl+Y</kbd> undo/redo · <kbd>←</kbd>/<kbd>→</kbd> change step in step-by-step mode</p>
+      <div class="row end"><button value="close" class="primary">Got it</button></div>
     </form>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="quiver-core.js"></script>
-  <script src="ar-core.js"></script>
-  <script src="app.js"></script>
+  <script src="quiver-core.js?v=7"></script>
+  <script src="ar-core.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

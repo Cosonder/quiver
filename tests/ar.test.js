@@ -117,3 +117,149 @@ for (let t = 0; t < 300; t++) {
 // ---- 有向圈：拒绝
 assert.strictEqual(AR.arQuiver([[0, 1], [1, 0]]).reason, 'cyclic');
 console.log('all AR tests passed');
+
+// ---- 有向圈的具体例子
+{
+  const c = AR.findCycle([[0, 1, 0], [0, 0, 1], [1, 0, 0]]);
+  assert.strictEqual(c.length, 3);
+  for (let t = 0; t < 3; t++) assert.strictEqual([[0, 1, 0], [0, 0, 1], [1, 0, 0]][c[t]][c[(t + 1) % 3]], 1, 'cycle edges');
+  assert.strictEqual(AR.findCycle([[0, 1], [0, 0]]), null);
+  console.log('findCycle ok');
+}
+
+// ---- 正则分支：Euclidean 型的管
+{
+  const cycleEdges = (m) => Array.from({ length: m }, (_, i) => [i, (i + 1) % m]);
+  const cases = [];
+  for (let m = 2; m <= 7; m++) cases.push({ name: 'Ã' + (m - 1), n: m, e: cycleEdges(m), ranks: null });
+  for (let k = 4; k <= 8; k++) {
+    // D̃_k：k+1 个顶点，两个三叉点各带两片叶子
+    const e = [];
+    for (let i = 0; i < k - 2; i++) e.push([i, i + 1]);
+    e.push([0, k - 1], [k - 2, k]);
+    // k = 4 时 0 与 2 并不相邻 —— 用星形
+    const edges = k === 4 ? [[0, 1], [0, 2], [0, 3], [0, 4]] : (() => {
+      const f = []; // 主干 0 - 1 - … - (k-4)，0 上挂 k-3, k-2，末端挂 k-1, k
+      for (let i = 0; i < k - 4; i++) f.push([i, i + 1]);
+      f.push([0, k - 3], [0, k - 2], [k - 4, k - 1], [k - 4, k]);
+      return f;
+    })();
+    cases.push({ name: 'D̃' + k, n: k + 1, e: edges, ranks: [2, 2, k - 2].filter((r) => r > 1).sort((a, b) => a - b) });
+  }
+  [[[2, 2, 2], [2, 3, 3], 'Ẽ6'], [[1, 3, 3], [2, 3, 4], 'Ẽ7'], [[1, 2, 5], [2, 3, 5], 'Ẽ8']].forEach(([arms, ranks, name]) => {
+    const s = star(arms); cases.push({ name, n: s.n, e: s.e, ranks });
+  });
+  for (const c of cases) {
+    for (let rep = 0; rep < 12; rep++) {
+      const perm = shuffle(c.n);
+      const A = Array.from({ length: c.n }, () => new Array(c.n).fill(0));
+      let cw = 0, ccw = 0;
+      c.e.forEach(([a, b]) => {
+        if (Math.random() < 0.5) { A[perm[a]][perm[b]] += 1; cw++; } else { A[perm[b]][perm[a]] += 1; ccw++; }
+      });
+      if (c.name.startsWith('Ã') && (cw === 0 || ccw === 0)) { // 有向圈，换一个定向
+        const [a, b] = c.e[0];
+        if (cw === 0) { A[perm[b]][perm[a]] -= 1; A[perm[a]][perm[b]] += 1; cw = 1; ccw--; }
+        else { A[perm[a]][perm[b]] -= 1; A[perm[b]][perm[a]] += 1; ccw = 1; cw--; }
+      }
+      const res = AR.arQuiver(A, { layers: 3 });
+      assert(res.ok && res.comps.length === 1 && res.comps[0].kind === 'euclidean', c.name);
+      const reg = res.comps[0].regular;
+      assert(reg && reg.ok, c.name + ' regular');
+      const ranks = reg.tubes.map((t) => t.rank);
+      const expect = c.ranks || [cw, ccw].filter((r) => r > 1).sort((a, b) => a - b);
+      assert.deepStrictEqual(ranks, expect, c.name + ' tube ranks');
+      assert.strictEqual(ranks.reduce((s, r) => s + r - 1, 0), c.n - 2, c.name + ' Σ(r−1) = n−2');
+      // δ 在 Tits 型的根基中
+      assert.strictEqual(titsBig(A, reg.delta), 0n);
+      const t = AR.tubes(A, res.P, res.comps[0].verts);
+      for (const tube of reg.tubes) {
+        const r = tube.rank;
+        for (let k = 0; k < r; k++) {
+          // τ 的作用：Φ(simples[k]) = simples[k+1]
+          assert.deepStrictEqual(t.phi(tube.simples[k]), tube.simples[(k + 1) % r]);
+          for (let l = 1; l <= r + 1; l++) {
+            const d = AR.tubeModuleDim(tube, k, l);
+            assert.strictEqual(euler(A, reg.delta, d), 0, 'defect 0');
+            assert.strictEqual(titsBig(A, d), l % r === 0 ? 0n : 1n, 'real / imaginary root');
+          }
+        }
+      }
+      // Φ 与编织算法一致：dim τX = Φ dim X
+      res.tau.forEach(({ from, to }) => assert.deepStrictEqual(t.phi(res.nodes[from].dim), res.nodes[to].dim, 'Φ = τ'));
+    }
+  }
+  console.log('tubes ok');
+}
+
+// ---- 导出范畴与丛范畴
+{
+  const keyset = (arr) => new Set(arr.map((v) => v.join(',')));
+  for (const t of dynkin) {
+    for (let rep = 0; rep < 8; rep++) {
+      const A = fromEdges(t.n, t.e, shuffle(t.n));
+      const mod = AR.arQuiver(A);
+      const modSet = keyset(mod.nodes.map((x) => x.dim));
+      // D^b，平移 −1..2：每个平移次数恰好是 mod kQ 的一份拷贝
+      const D = AR.derivedQuiver(A, { category: 'derived', dmin: -1, dmax: 2 });
+      for (let d = -1; d <= 2; d++) {
+        const layer = D.nodes.filter((x) => x.deg === d);
+        assert.strictEqual(layer.length, t.count, t.name + ' copy size [' + d + ']');
+        assert.deepStrictEqual(keyset(layer.map((x) => x.dim)), modSet, t.name + ' copy = mod');
+        layer.forEach((x) => assert.deepStrictEqual(x.cls, x.dim.map((v) => (d % 2 === 0 ? v : -v || 0))));
+      }
+      // τ⁻¹ I(j) = P(j)[1]
+      const at = new Map(D.nodes.map((x) => [x.r + ':' + x.i, x]));
+      D.nodes.filter((x) => x.deg === 0 && x.inj >= 0).forEach((x) => {
+        const y = at.get((x.r + 1) + ':' + x.i);
+        assert(y && y.deg === 1, 'next is shifted');
+        assert.deepStrictEqual(y.dim, D.P[x.inj], t.name + ' Nakayama');
+      });
+      // AR 公式在 K₀ 中：<[X], y> = −<y, [τX]>
+      D.tau.forEach(({ from, to }) => {
+        for (let j = 0; j < t.n; j++) {
+          const e = new Array(t.n).fill(0); e[j] = 1;
+          assert.strictEqual(euler(A, D.nodes[from].cls, e) + euler(A, e, D.nodes[to].cls), 0, 'AR formula D^b');
+        }
+      });
+      // 丛范畴：不可分解对象 = 正根 + n
+      const C = AR.derivedQuiver(A, { category: 'cluster' });
+      assert.strictEqual(C.total, t.count + t.n, t.name + ' cluster count');
+      const sp = C.nodes.filter((x) => x.shiftP >= 0 && !x.ghost).map((x) => x.shiftP).sort((a, b) => a - b);
+      assert.deepStrictEqual(sp, [...Array(t.n).keys()], 'each P[1] once');
+      assert.deepStrictEqual(keyset(C.nodes.filter((x) => x.shiftP < 0 && !x.ghost).map((x) => x.dim)), modSet, 'cluster modules');
+      // 绕回：P(j)[1] 的 τ⁻¹ 是 P(j)
+      const atC = new Map(C.nodes.map((x) => [x.r + ':' + x.i, x]));
+      C.nodes.filter((x) => x.shiftP >= 0).forEach((x) => {
+        const g = atC.get((x.r + 1) + ':' + x.i);
+        assert(g && g.ghost && g.proj === x.shiftP, 'wrap to P');
+      });
+    }
+  }
+  // 非 Dynkin：含投射模的分支 = 预内射[−1] ∪ 预投射[0]
+  for (let tcase = 0; tcase < 200; tcase++) {
+    const n = 2 + Math.floor(Math.random() * 5);
+    const p = shuffle(n);
+    const B = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (Math.random() < 0.5) B[p[i]][p[j]] = 1 + (Math.random() < 0.15 ? 1 : 0);
+    const D = AR.derivedQuiver(B, { category: 'derived', layers: 4 });
+    const C = AR.derivedQuiver(B, { category: 'cluster', layers: 4 });
+    const inf = new Set(); D.comps.forEach((c) => { if (c.kind !== 'dynkin') c.verts.forEach((v) => inf.add(v)); });
+    D.nodes.filter((x) => inf.has(x.i)).forEach((x) => {
+      assert.strictEqual(x.deg, x.r >= 0 ? 0 : -1, 'degree');
+      if (x.r === -1) assert.deepStrictEqual(x.dim, D.I[x.i], 'τP = I[−1]');
+    });
+    D.tau.forEach(({ from, to }) => {
+      for (let j = 0; j < n; j++) {
+        const e = new Array(n).fill(0); e[j] = 1;
+        assert.strictEqual(euler(B, D.nodes[from].cls, e) + euler(B, e, D.nodes[to].cls), 0, 'AR formula');
+      }
+    });
+    C.nodes.filter((x) => inf.has(x.i)).forEach((x) => {
+      if (x.r === -1) assert.strictEqual(x.shiftP, x.i, 'P[1] column');
+      if (x.r === -2) assert.deepStrictEqual(x.dim, C.I[x.i], 'then I');
+      if (x.r >= 0) assert.deepStrictEqual(x.dim, x.cls, 'preprojective');
+    });
+  }
+  console.log('derived / cluster ok');
+}

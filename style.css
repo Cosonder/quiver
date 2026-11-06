@@ -327,6 +327,7 @@ select { width: 100%; }
 .ar-box .hint { margin: 0 0 6px; }
 .ar-box button { width: 100%; }
 dialog.dlg-wide { width: min(1200px, calc(100% - 24px)); height: calc(100% - 32px); }
+dialog.dlg-wide.compact { height: auto; width: min(640px, calc(100% - 24px)); }
 .ar-dlg { display: flex; flex-direction: column; height: 100%; gap: 6px; }
 .ar-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ar-top h2 { margin: 0; }
@@ -358,6 +359,17 @@ dialog.dlg-wide { width: min(1200px, calc(100% - 24px)); height: calc(100% - 32p
 .ar-node.nb rect { fill: var(--accent-soft); }
 .ar-node:hover rect { fill: var(--accent-soft); }
 .ar-gap { fill: var(--muted); font-size: 13px; text-anchor: middle; dominant-baseline: central; }
+.ar-tube-title { fill: var(--text); font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+.ar-tube-note { fill: var(--muted); font-size: 11px; text-anchor: middle; dominant-baseline: central; }
+.ar-band { stroke: var(--border); stroke-width: 1; }
+.ar-glue { stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 6 5; opacity: .7; }
+.ar-node.regular rect { stroke: var(--accent); stroke-opacity: .55; }
+.ar-node.regular.rsimple rect { stroke-opacity: 1; stroke-width: 1.8; }
+.ar-node.ghost { opacity: .45; }
+.ar-node.odd:not(.sel):not(.nb) rect { fill: var(--grid); }
+.ar-node.shiftp rect { stroke: var(--red); stroke-width: 2; }
+#ar-dmin, #ar-dmax { width: 48px; }
+.ar-node.ghost rect { stroke-dasharray: 3 3; }
 .ar-comp { fill: var(--muted); font-size: 12px; font-weight: 600; }
 .ar-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
 .ar-legend span { display: flex; align-items: center; gap: 4px; }
@@ -365,8 +377,14 @@ dialog.dlg-wide { width: min(1200px, calc(100% - 24px)); height: calc(100% - 32p
 .ar-legend .sw.proj { border-color: var(--blue); }
 .ar-legend .sw.inj { border-color: var(--orange); }
 .ar-legend .sw.projinj { border-color: var(--green); }
+.ar-legend .sw.regular { border-color: var(--accent); }
+.ar-legend .sw.shiftp { border-color: var(--red); }
+.ar-legend .sw.odd { background: var(--grid); }
 .ar-order { margin-left: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ar-info { font-size: 13px; min-height: 2.6em; }
+.ar-warn { color: var(--orange); }
+.ar-fix { margin: 4px 6px 0 0; }
+.ar-dlg .ar-desc .ar-warn { display: block; font-size: 14px; font-weight: 600; margin: 4px 0; }
 .ar-info b { font-weight: 600; }
 .ar-info code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
