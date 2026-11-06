@@ -1,8 +1,10 @@
 # quiver
 
+**在线使用：<https://cosonder.github.io/quiver/>**
+
 一个纯前端的网页工具：绘制**箭图（quiver）**与**冰箭图（ice quiver）**，并演示**箭图变异（quiver mutation）**。
 
-无需构建、无依赖，直接用浏览器打开 `index.html` 即可（也可以通过 GitHub Pages 发布）。
+无需构建、无依赖，可以直接访问上面的在线地址，也可以在本地用浏览器打开 `index.html`。
 
 ## 功能
 
