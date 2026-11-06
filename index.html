@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quiver Mutation</title>
   <meta name="description" content="在浏览器中绘制箭图（quiver）与冰箭图（ice quiver），并演示箭图变异（quiver mutation）。">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <header class="topbar">
@@ -70,6 +70,7 @@
           <option value="A4">A₄（交错定向）</option>
           <option value="D4">D₄</option>
           <option value="E6">E₆</option>
+          <option value="D4tilde">D̃₄（四子空间，无限表示型）</option>
           <option value="A2tilde">Ã₂（非定向三角，无限表示型）</option>
           <option value="cyc3">三角循环（A₃ 的变异）</option>
           <option value="kronecker">Kronecker 箭图</option>
@@ -225,7 +226,8 @@
           </select>
         </label>
         <label class="check"><input type="checkbox" id="ar-tau" checked> 显示 τ（虚线）</label>
-        <label id="ar-layers-wrap">层数 <input id="ar-layers" type="number" min="1" max="12" value="4"></label>
+        <label class="check" id="ar-reg-wrap"><input type="checkbox" id="ar-reg" checked> 显示正则分支（管）</label>
+        <label id="ar-layers-wrap" title="预投射 / 预内射分支的层数，以及管中显示的拟长度">层数 <input id="ar-layers" type="number" min="1" max="12" value="4"></label>
         <span class="spacer"></span>
         <button id="ar-zoom-out" aria-label="缩小">−</button>
         <button id="ar-zoom-fit">适应</button>
@@ -246,6 +248,7 @@
         <span><i class="sw inj"></i>内射</span>
         <span><i class="sw projinj"></i>投射-内射</span>
         <span><i class="sw simple"></i>单模（加粗）</span>
+        <span><i class="sw regular"></i>正则模（管）</span>
         <span id="ar-order" class="ar-order"></span>
       </div>
       <div id="ar-info" class="ar-info">点击一个模查看详情；同时高亮它的直接前驱与后继。</div>
@@ -262,7 +265,7 @@
         <li><b>删除</b>工具点击箭头每次删除一条，点击顶点删除该顶点。</li>
         <li>在 <b>选择/移动</b> 工具下拖动顶点，<b>双击顶点</b>即在该点变异。</li>
         <li>右侧 <b>路代数 kQ</b> 面板给出 kQ（或截断 kQ/R<sup>L</sup>）的维数，以及不可分解投射模 P(i)、内射模 I(i)、单模 S(i) 的维数向量；点击一行可在画布上标出维数向量，并查看根层 / 基座层。</li>
-        <li><b>AR 箭图</b>：对无圈箭图的路代数 kQ，用编织算法计算 Auslander–Reiten 箭图。Dynkin 型（A/D/E）给出全部不可分解模；Euclidean / wild 型给出预投射、预内射分支的前若干层。</li>
+        <li><b>AR 箭图</b>：对无圈箭图的路代数 kQ，用编织算法计算 Auslander–Reiten 箭图。Dynkin 型（A/D/E）给出全部不可分解模；Euclidean 型还画出正则分支：例外管与齐次管；wild 型给出预投射、预内射分支的前若干层。</li>
       </ul>
       <h3>变异 μ<sub>k</sub></h3>
       <ol>
@@ -282,8 +285,8 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="quiver-core.js?v=4"></script>
-  <script src="ar-core.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="quiver-core.js?v=5"></script>
+  <script src="ar-core.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

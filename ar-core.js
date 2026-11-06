@@ -406,6 +406,16 @@
       rowStart += rows.length + 1;
     });
 
+    if (opts.tubes !== false) {
+      comps.forEach((c) => {
+        if (c.kind !== 'euclidean') return;
+        const t = tubes(A, P, c.verts);
+        c.regular = t.ok
+          ? { ok: true, delta: t.delta, tubes: t.tubes }
+          : { ok: false, reason: t.reason, delta: t.delta || null };
+      });
+    }
+
     const total = finite ? nodes.length : null;
     return {
       ok: true, finite: finite, total: total, layers: R,
@@ -413,10 +423,169 @@
     };
   }
 
+
+  // ------------------------------------------------------------------ 正则分支（管）
+  /*
+   * Euclidean（tame）型连通箭图的正则分支是 ℙ¹ 参数族的管（tube）：
+   * 除至多三个例外管外都是 rank 1 的齐次管。
+   *   δ          : 零根（Tits 型的根基中的最小正向量）
+   *   亏量 ∂(x)  : ⟨δ, x⟩，正则模的亏量为 0
+   *   Φ          : Coxeter 变换，非投射不可分解模 X 满足 dim τX = Φ·dim X，
+   *                Φ = −C·Eᵀ，其中 E = I − A（Euler 形式的矩阵），C = E⁻¹（路数矩阵）
+   * 例外管中拟长度 < rank 的模的维数向量恰为满足 0 < x < δ、q(x) = 1、∂(x) = 0 的实根；
+   * 它们在 Φ 下的轨道中，和为 δ 的轨道就是一个管的正则单模（轨道长度 = 管的 rank）。
+   */
+  function fr(n, d) {
+    if (d < 0n) { n = -n; d = -d; }
+    const g = gcdBig(n < 0n ? -n : n, d);
+    return g > 1n ? { n: n / g, d: d / g } : { n: n, d: d };
+  }
+  function gcdBig(a, b) { while (b) { const t = a % b; a = b; b = t; } return a || 1n; }
+
+  /** 整数方阵的核（假定一维），返回分量为互素正整数的向量；否则 null */
+  function kernelVector(M) {
+    const n = M.length;
+    const R = M.map((r) => r.map((x) => fr(BigInt(x), 1n)));
+    const sub = (a, b) => fr(a.n * b.d - b.n * a.d, a.d * b.d);
+    const mul = (a, b) => fr(a.n * b.n, a.d * b.d);
+    const div = (a, b) => fr(a.n * b.d, a.d * b.n);
+    const pivots = [];
+    let row = 0;
+    for (let col = 0; col < n && row < n; col++) {
+      let p = -1;
+      for (let i = row; i < n; i++) if (R[i][col].n !== 0n) { p = i; break; }
+      if (p < 0) continue;
+      [R[row], R[p]] = [R[p], R[row]];
+      const pv = R[row][col];
+      for (let j = 0; j < n; j++) R[row][j] = div(R[row][j], pv);
+      for (let i = 0; i < n; i++) {
+        if (i === row || R[i][col].n === 0n) continue;
+        const f = R[i][col];
+        for (let j = 0; j < n; j++) R[i][j] = sub(R[i][j], mul(f, R[row][j]));
+      }
+      pivots.push(col);
+      row++;
+    }
+    const free = [];
+    for (let c = 0; c < n; c++) if (pivots.indexOf(c) < 0) free.push(c);
+    if (free.length !== 1) return null;
+    const f = free[0];
+    const x = new Array(n).fill(null);
+    x[f] = fr(1n, 1n);
+    pivots.forEach((c, r) => { x[c] = fr(-R[r][f].n, R[r][f].d); });
+    let L = 1n;
+    x.forEach((v) => { L = L / gcdBig(L, v.d) * v.d; });
+    let ints = x.map((v) => v.n * (L / v.d));
+    let g = 0n;
+    ints.forEach((v) => { g = gcdBig(g, v < 0n ? -v : v); });
+    ints = ints.map((v) => v / g);
+    if (ints.every((v) => v <= 0n)) ints = ints.map((v) => -v);
+    if (!ints.every((v) => v > 0n)) return null;
+    return ints.map(Number);
+  }
+
+  /**
+   * 计算 Euclidean 连通分支 comp 的管。
+   * @param A  整个箭图的箭头计数矩阵（无圈）
+   * @param P  dim P(i)（= 路数矩阵 C 的第 i 行）
+   * @return { delta, tubes: [{ rank, simples }], ok, reason }
+   *   simples[k+1] = Φ(simples[k])，即 simples[k+1] = τ simples[k]
+   */
+  function tubes(A, P, comp, opts) {
+    opts = opts || {};
+    const n = A.length;
+    const maxCand = opts.maxCandidates || 4e6;
+    // Tits 型的对称矩阵 2I − (A + Aᵀ)，限制在分支上
+    const S = comp.map((i) => comp.map((j) => (i === j ? 2 : 0) - A[i][j] - A[j][i]));
+    const dc = kernelVector(S);
+    if (!dc) return { ok: false, reason: 'no-delta' };
+    const delta = new Array(n).fill(0);
+    comp.forEach((v, t) => { delta[v] = dc[t]; });
+    const euler = (x, y) => {
+      let s = 0;
+      for (let i = 0; i < n; i++) {
+        if (!x[i]) continue;
+        s += x[i] * y[i];
+        for (let j = 0; j < n; j++) if (A[i][j]) s -= A[i][j] * x[i] * y[j];
+      }
+      return s;
+    };
+    const phi = (x) => {
+      const y = new Array(n).fill(0); // y = Eᵀ x
+      for (let j = 0; j < n; j++) {
+        let s = x[j];
+        for (let i = 0; i < n; i++) if (A[i][j]) s -= A[i][j] * x[i];
+        y[j] = s;
+      }
+      const z = new Array(n).fill(0);
+      for (let i = 0; i < n; i++) {
+        let s = 0;
+        for (let j = 0; j < n; j++) if (P[i][j] && y[j]) s += P[i][j] * y[j];
+        z[i] = -s || 0;
+      }
+      return z;
+    };
+    let cand = 1;
+    comp.forEach((v) => { cand *= delta[v] + 1; });
+    if (cand > maxCand) return { ok: false, reason: 'too-large', delta: delta };
+
+    // 枚举 0 < x < δ，q(x) = 1，∂(x) = 0
+    const key = (x) => x.join(',');
+    const roots = new Map();
+    const x = new Array(n).fill(0);
+    const rec = (t) => {
+      if (t === comp.length) {
+        if (x.every((v) => v === 0) || comp.every((v) => x[v] === delta[v])) return;
+        if (euler(x, x) === 1 && euler(delta, x) === 0) roots.set(key(x), x.slice());
+        return;
+      }
+      const v = comp[t];
+      for (let a = 0; a <= delta[v]; a++) { x[v] = a; rec(t + 1); }
+      x[v] = 0;
+    };
+    rec(0);
+
+    // Φ 轨道
+    const seen = new Set();
+    const result = [];
+    for (const [k, v] of roots) {
+      if (seen.has(k)) continue;
+      const orbit = [v];
+      seen.add(k);
+      let cur = phi(v);
+      let guard = 0;
+      while (key(cur) !== k && guard++ < 4 * n + 4) {
+        orbit.push(cur);
+        seen.add(key(cur));
+        cur = phi(cur);
+      }
+      const sum = new Array(n).fill(0);
+      orbit.forEach((o) => o.forEach((a, i) => { sum[i] += a; }));
+      if (key(sum) === key(delta)) result.push({ rank: orbit.length, simples: orbit });
+    }
+    result.sort((a, b) => a.rank - b.rank);
+    return { ok: true, delta: delta, tubes: result, phi: phi };
+  }
+
+  /** 管中模 M_k[l] 的维数向量：正则基座为 simples[k]，正则合成因子 simples[k], simples[k−1], … */
+  function tubeModuleDim(tube, k, l) {
+    const r = tube.simples.length;
+    const n = tube.simples[0].length;
+    const v = new Array(n).fill(0);
+    for (let t = 0; t < l; t++) {
+      const s = tube.simples[((k - t) % r + r) % r];
+      for (let i = 0; i < n; i++) v[i] += s[i];
+    }
+    return v;
+  }
+
   const api = {
     components: components,
     topoOrder: topoOrder,
     findCycle: findCycle,
+    kernelVector: kernelVector,
+    tubes: tubes,
+    tubeModuleDim: tubeModuleDim,
     classify: classify,
     titsForm: titsForm,
     arQuiver: arQuiver

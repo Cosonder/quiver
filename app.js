@@ -433,6 +433,10 @@
       verts: [['1', -2.6, 0.6], ['2', -1.3, 0.6], ['3', 0, 0.6], ['4', 1.3, 0.6], ['5', 2.6, 0.6], ['6', 0, -0.9]],
       arrows: [['1', '2', 1], ['2', '3', 1], ['4', '3', 1], ['5', '4', 1], ['6', '3', 1]]
     },
+    D4tilde: {
+      verts: [['1', -1.8, -1.4], ['2', 1.8, -1.4], ['3', -1.8, 1.4], ['4', 1.8, 1.4], ['5', 0, 0]],
+      arrows: [['1', '5', 1], ['2', '5', 1], ['3', '5', 1], ['4', '5', 1]]
+    },
     A2tilde: { verts: [['1', -1.8, 1], ['2', 0, -1.6], ['3', 1.8, 1]], arrows: [['1', '2', 1], ['2', '3', 1], ['1', '3', 1]] },
     cyc3: { verts: [['1', -1.7, 1], ['2', 0, -1.9], ['3', 1.7, 1]], arrows: [['1', '2', 1], ['2', '3', 1], ['3', '1', 1]] },
     kronecker: { verts: [['1', -1.5, 0], ['2', 1.5, 0]], arrows: [['1', '2', 2]] },
@@ -667,7 +671,14 @@
     if (ar.finite) {
       html = '有限表示型（' + names + '），共 <b>' + ar.total + '</b> 个不可分解模（与正根一一对应）。';
     } else {
-      html = '无限表示型（' + names + '）。画出预投射、预内射分支的前 ' + ar.layers + ' 层，规则分支未画出。';
+      html = '无限表示型（' + names + '）。画出预投射、预内射分支的前 ' + ar.layers + ' 层';
+      const tubeText = ar.comps.filter((c) => c.kind === 'euclidean' && c.regular && c.regular.ok).map((c) => {
+        const rk = c.regular.tubes.map((t) => t.rank);
+        return (rk.length ? '例外管 rank ' + rk.join(', ') + ' 与' : '') + '齐次管';
+      });
+      if (tubeText.length) html += '；正则分支是 ℙ¹ 参数族的管（' + tubeText.join('；') + '）';
+      if (ar.comps.some((c) => c.kind === 'wild')) html += '；wild 型的正则分支（无穷多个 ℤA∞ 型分支）未画出';
+      html += '。';
     }
     if (info.opts.trunc) html += ' 注：按无关系的 kQ 计算，不考虑截断。';
     return html;
@@ -725,6 +736,8 @@
     eN.textContent = '';
     $('ar-desc').innerHTML = arSummary(value);
     $('ar-layers-wrap').hidden = !ar.ok || ar.finite;
+    const hasEuclid = ar.ok && ar.comps.some((c) => c.kind === 'euclidean');
+    $('ar-reg-wrap').hidden = !hasEuclid;
     $('ar-order').textContent = ar.ok ? '维数向量分量顺序：(' + info.verts.map((i) => state.vertices[i].label).join(', ') + ')' : '';
     document.querySelectorAll('.ar-controls, #ar-scroll, .ar-legend').forEach((x) => { x.hidden = !ar.ok; });
     $('dlg-ar').classList.toggle('compact', !ar.ok);
@@ -734,26 +747,102 @@
       arFixes(value);
       return;
     }
-    const nodes = ar.nodes;
-    if (arSel != null && !nodes[arSel]) arSel = null;
+
+    // ---- 统一的绘制对象：AR 箭图中的模 + 管中的模
     const mode = $('ar-label').value;
-    const text = (nd) => (mode === 'name' ? arNodeName(nd, info) : dimLabel(nd.dim));
-    const widths = nodes.map((nd) => Math.max(26, text(nd).length * 7.4 + 12));
+    const showReg = hasEuclid && $('ar-reg').checked;
+    const L = arLayers();
+    const items = ar.nodes.map((nd) => ({
+      id: nd.id, kind: 'ar', nd: nd, dim: nd.dim,
+      name: arNodeName(nd, info),
+      proj: nd.proj >= 0, inj: nd.inj >= 0, simple: nd.simple
+    }));
+    const links = ar.edges.map((e) => ({ from: e.from, to: e.to, mult: e.mult, curve: Math.abs(ar.nodes[e.from].row - ar.nodes[e.to].row) >= 2 }));
+    const taus = ar.tau.slice();
+    const tubeBoxes = []; // 管的外框信息
+    if (showReg) {
+      ar.comps.forEach((c, ci) => {
+        if (c.kind !== 'euclidean' || !c.regular) return;
+        if (!c.regular.ok) { tubeBoxes.push({ comp: c, failed: true }); return; }
+        const list = c.regular.tubes.map((t, ti) => ({ rank: t.rank, simples: t.simples, homog: false, index: ti + 1 }));
+        list.push({ rank: 1, simples: [c.regular.delta], homog: true, index: 0 });
+        list.forEach((tube) => {
+          const r = tube.rank;
+          const at = new Map();
+          const box = { comp: c, tube: tube, cells: [] };
+          for (let l = 1; l <= L; l++) {
+            for (let x = (l - 1) % 2; x <= 2 * r; x += 2) {
+              const k = ((-(x - (l - 1)) / 2) % r + r) % r;
+              const dim = AR.tubeModuleDim(tube, k, l);
+              const it = {
+                id: items.length, kind: 'tube', dim: dim, tube: tube, k: k, l: l, tx: x, ghost: x === 2 * r, comp: ci,
+                name: tube.homog ? 'Mλ[' + l + ']' : 'E' + (k + 1) + '[' + l + ']',
+                proj: false, inj: false, simple: dim.reduce((a, b) => a + b, 0) === 1
+              };
+              items.push(it);
+              box.cells.push(it);
+              at.set(x + ':' + l, it.id);
+            }
+          }
+          box.cells.forEach((it) => {
+            [[1, 1], [1, -1]].forEach(([dx, dl]) => {
+              const to = at.get((it.tx + dx) + ':' + (it.l + dl));
+              if (to != null) links.push({ from: it.id, to: to, mult: 1, curve: false });
+            });
+            const left = at.get((it.tx - 2) + ':' + it.l);
+            if (left != null) taus.push({ from: it.id, to: left });
+          });
+          tubeBoxes.push(box);
+        });
+      });
+    }
+    if (arSel != null && !items[arSel]) arSel = null;
+
+    const text = (it) => (mode === 'name' ? it.name : dimLabel(it.dim));
+    const widths = items.map((it) => Math.max(26, text(it).length * 7.4 + 12));
     const maxW = Math.max.apply(null, widths);
     const UX = Math.max(26, (maxW + 12) / 2), UY = 46, PAD = 34, HH = 11;
     const multi = ar.comps.length > 1;
+    const nodes = ar.nodes;
     const minX = Math.min.apply(null, nodes.map((nd) => nd.x));
     const maxX = Math.max.apply(null, nodes.map((nd) => nd.x));
     const maxRow = Math.max.apply(null, nodes.map((nd) => nd.row));
     const left = PAD + maxW / 2 + (multi ? 40 : 0);
-    const pos = (nd) => ({ X: left + (nd.x - minX) * UX, Y: PAD + nd.row * UY });
-    const W = left + (maxX - minX) * UX + PAD + maxW / 2;
-    const H = PAD * 2 + maxRow * UY;
+    let W = left + (maxX - minX) * UX + PAD + maxW / 2;
+    let H = PAD * 2 + maxRow * UY;
+    nodes.forEach((nd) => { items[nd.id].X = left + (nd.x - minX) * UX; items[nd.id].Y = PAD + nd.row * UY; });
+
+    // 管的布局：放在主图下方，从左到右排列，拟长度 1（管口）在最下面
+    const decorations = [];
+    if (tubeBoxes.length) {
+      const top = PAD + (maxRow + 1.4) * UY;
+      decorations.push({ type: 'band', y: top - 0.55 * UY });
+      let cursor = left;
+      tubeBoxes.forEach((b) => {
+        if (b.failed) {
+          decorations.push({ type: 'text', x: cursor, y: top + UY, text: b.comp.name + '：δ 太大，未计算管。', anchor: 'start' });
+          cursor += 12 * UX;
+          return;
+        }
+        const r = b.tube.rank;
+        const x0 = cursor;
+        b.cells.forEach((it) => { it.X = x0 + it.tx * UX; it.Y = top + 1.15 * UY + (L - it.l) * UY; });
+        const bottom = top + 1.15 * UY + (L - 1) * UY;
+        const title = (multi ? b.comp.name + ' · ' : '') + (b.tube.homog ? '齐次管（rank 1）' : '例外管 ' + b.tube.index + '（rank ' + r + '）');
+        decorations.push({ type: 'text', x: x0 + r * UX, y: top, text: title, cls: 'ar-tube-title' });
+        decorations.push({ type: 'vline', x: x0, y1: top + 0.45 * UY, y2: bottom + 0.5 * UY });
+        decorations.push({ type: 'vline', x: x0 + 2 * r * UX, y1: top + 0.45 * UY, y2: bottom + 0.5 * UY });
+        decorations.push({ type: 'text', x: x0 + r * UX, y: bottom + 0.85 * UY, text: b.tube.homog ? 'ℙ¹ 中其余每一点各一个' : '左右两条虚线粘合', cls: 'ar-tube-note' });
+        cursor = x0 + 2 * r * UX + Math.max(4 * UX, maxW + 24);
+        W = Math.max(W, x0 + 2 * r * UX + PAD + maxW / 2);
+        H = Math.max(H, bottom + 0.85 * UY + PAD);
+      });
+    }
 
     // 邻居
     const nb = new Set();
     if (arSel != null) {
-      ar.edges.forEach((e) => {
+      links.forEach((e) => {
         if (e.from === arSel) nb.add(e.to);
         if (e.to === arSel) nb.add(e.from);
       });
@@ -761,23 +850,29 @@
 
     const trim = (w, dx, dy) => Math.min(Math.abs(dx) > 1e-9 ? w / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-9 ? (HH + 3) / Math.abs(dy) : Infinity);
 
+    // 装饰：分隔线、管的边界与标题
+    decorations.forEach((d) => {
+      if (d.type === 'band') el('line', { x1: PAD / 2, y1: d.y, x2: W - PAD / 2, y2: d.y, class: 'ar-band' }, eE);
+      else if (d.type === 'vline') el('line', { x1: d.x, y1: d.y1, x2: d.x, y2: d.y2, class: 'ar-glue' }, eE);
+      else el('text', { x: d.x, y: d.y, class: d.cls || 'ar-gap', 'text-anchor': d.anchor || 'middle' }, eN).textContent = d.text;
+    });
+
     // τ（虚线）
     if ($('ar-tau').checked) {
-      ar.tau.forEach((t) => {
-        const a = nodes[t.from], b = nodes[t.to];
-        const p = pos(a), q = pos(b);
-        el('line', { x1: p.X - widths[a.id] / 2 - 3, y1: p.Y, x2: q.X + widths[b.id] / 2 + 3, y2: q.Y, class: 'ar-tau' }, eE);
+      taus.forEach((t) => {
+        const a = items[t.from], b = items[t.to];
+        el('line', { x1: a.X - widths[a.id] / 2 - 3, y1: a.Y, x2: b.X + widths[b.id] / 2 + 3, y2: b.Y, class: 'ar-tau' }, eE);
       });
     }
 
     // 不可约映射
-    ar.edges.forEach((e) => {
-      const a = nodes[e.from], b = nodes[e.to];
-      const p = pos(a), q = pos(b);
+    links.forEach((e) => {
+      const a = items[e.from], b = items[e.to];
+      const p = { X: a.X, Y: a.Y }, q = { X: b.X, Y: b.Y };
       const hl = arSel != null && (e.from === arSel || e.to === arSel);
       const dx = q.X - p.X, dy = q.Y - p.Y, len = Math.hypot(dx, dy);
       const nx = -dy / len, ny = dx / len;
-      const bend = Math.abs(a.row - b.row) >= 2 ? 0.22 * len : 0;
+      const bend = e.curve ? 0.22 * len : 0;
       const m = e.mult <= 3 ? e.mult : 1;
       for (let t = 0; t < m; t++) {
         const off = (t - (m - 1) / 2) * 5;
@@ -802,23 +897,30 @@
       const yMid = PAD + (c.rowStart + (c.rows - 1) / 2) * UY;
       if (multi) el('text', { x: 8, y: yMid, class: 'ar-comp', 'dominant-baseline': 'central' }, eN).textContent = c.name;
       if (c.gapX != null) {
-        el('text', { x: left + (c.gapX - minX) * UX, y: yMid, class: 'ar-gap' }, eN).textContent = '⋯ 规则分支 ⋯';
+        const label = c.kind === 'wild' ? '⋯ wild ⋯' : (showReg ? '⋯ 管 ↓ ⋯' : '⋯ 正则分支 ⋯');
+        el('text', { x: left + (c.gapX - minX) * UX, y: yMid, class: 'ar-gap' }, eN).textContent = label;
       }
+    });
+    // 管顶的省略号
+    tubeBoxes.forEach((b) => {
+      if (b.failed) return;
+      const topRow = b.cells.filter((it) => it.l === L);
+      if (topRow.length) el('text', { x: b.cells[0].X + b.tube.rank * UX, y: topRow[0].Y - 0.58 * UY, class: 'ar-gap' }, eN).textContent = '⋮';
     });
 
     // 模
-    nodes.forEach((nd) => {
-      const p = pos(nd);
+    items.forEach((it) => {
       let cls = 'ar-node';
-      if (nd.proj >= 0) cls += ' proj';
-      if (nd.inj >= 0) cls += ' inj';
-      if (nd.simple) cls += ' simple';
-      if (nd.id === arSel) cls += ' sel';
-      else if (nb.has(nd.id)) cls += ' nb';
-      const g = el('g', { class: cls, transform: 'translate(' + p.X + ',' + p.Y + ')', 'data-ar': nd.id }, eN);
-      el('title', {}, g).textContent = arNodeName(nd, info) + '  dim = (' + nd.dim.join(', ') + ')';
-      el('rect', { x: -widths[nd.id] / 2, y: -HH, width: widths[nd.id], height: 2 * HH, rx: 5 }, g);
-      el('text', {}, g).textContent = text(nd);
+      if (it.proj) cls += ' proj';
+      if (it.inj) cls += ' inj';
+      if (it.simple) cls += ' simple';
+      if (it.kind === 'tube') cls += ' regular' + (it.ghost ? ' ghost' : '') + (it.l === 1 ? ' rsimple' : '');
+      if (it.id === arSel) cls += ' sel';
+      else if (nb.has(it.id)) cls += ' nb';
+      const g = el('g', { class: cls, transform: 'translate(' + it.X + ',' + it.Y + ')', 'data-ar': it.id }, eN);
+      el('title', {}, g).textContent = it.name + '  dim = (' + it.dim.join(', ') + ')';
+      el('rect', { x: -widths[it.id] / 2, y: -HH, width: widths[it.id], height: 2 * HH, rx: 5 }, g);
+      el('text', {}, g).textContent = text(it);
     });
 
     // 缩放
@@ -831,31 +933,48 @@
     svgAR.setAttribute('width', Math.round(W * arScale));
     svgAR.setAttribute('height', Math.round(H * arScale));
 
-    renderARInfo(value);
+    arDrawn = { items: items, links: links, value: value };
+    renderARInfo();
   }
 
-  function renderARInfo(value) {
-    const ar = value.ar, info = value.info;
+  let arDrawn = null;
+
+  function renderARInfo() {
     const box = $('ar-info');
-    if (arSel == null) {
-      box.textContent = '点击一个模查看详情，同时高亮它的直接前驱与后继。共 ' + ar.nodes.length + ' 个模（图中）。';
+    if (!arDrawn) return;
+    const items = arDrawn.items, links = arDrawn.links;
+    const ar = arDrawn.value.ar, info = arDrawn.value.info;
+    if (arSel == null || !items[arSel]) {
+      const nReg = items.filter((it) => it.kind === 'tube' && !it.ghost).length;
+      box.textContent = '点击一个模查看详情，同时高亮它的直接前驱与后继。图中共 ' + ar.nodes.length + ' 个预投射 / 预内射模' +
+        (nReg ? '，以及管中的 ' + nReg + ' 个模' : '') + '。';
       return;
     }
-    const nd = ar.nodes[arSel];
-    const parts = [arNodeName(nd, info)];
-    if ((nd.kind === 'I' || nd.r > 0) && nd.proj >= 0) parts.push('P' + vlabel(info, nd.proj));
-    if ((nd.kind === 'P' || nd.r > 0) && nd.inj >= 0) parts.push('I' + vlabel(info, nd.inj));
-    if (nd.simple) parts.push('S' + vlabel(info, nd.dim.indexOf(1)));
-    const preds = ar.edges.filter((e) => e.to === nd.id).map((e) => arNodeName(ar.nodes[e.from], info) + (e.mult > 1 ? sup(e.mult) : ''));
-    const succs = ar.edges.filter((e) => e.from === nd.id).map((e) => arNodeName(ar.nodes[e.to], info) + (e.mult > 1 ? sup(e.mult) : ''));
-    const total = nd.dim.reduce((a, b) => a + b, 0);
+    const it = items[arSel];
+    const parts = [it.name];
+    if (it.kind === 'ar') {
+      const nd = it.nd;
+      if ((nd.kind === 'I' || nd.r > 0) && nd.proj >= 0) parts.push('P' + vlabel(info, nd.proj));
+      if ((nd.kind === 'P' || nd.r > 0) && nd.inj >= 0) parts.push('I' + vlabel(info, nd.inj));
+    }
+    if (it.simple) parts.push('S' + vlabel(info, it.dim.indexOf(1)));
+    const nm = (id, m) => items[id].name + (m > 1 ? sup(m) : '');
+    const uniq = (arr) => arr.filter((x, i) => arr.indexOf(x) === i);
+    const preds = uniq(links.filter((e) => e.to === it.id).map((e) => nm(e.from, e.mult)));
+    const succs = uniq(links.filter((e) => e.from === it.id).map((e) => nm(e.to, e.mult)));
+    const total = it.dim.reduce((a, b) => a + b, 0);
     box.innerHTML = '';
     const b = document.createElement('b');
     b.textContent = parts.join(' ≅ ');
     box.append(b, '　dim = ');
     const code = document.createElement('code');
-    code.textContent = '(' + nd.dim.join(', ') + ')';
-    box.append(code, '，总维数 ' + total + '，所在分支 ' + ar.comps[nd.comp].name);
+    code.textContent = '(' + it.dim.join(', ') + ')';
+    let where;
+    if (it.kind === 'ar') where = '，所在分支 ' + ar.comps[it.nd.comp].name + (it.nd.kind === 'P' ? '（预投射）' : '（预内射）');
+    else if (it.tube.homog) where = '，正则模，在齐次管中（拟长度 ' + it.l + '，dim = ' + it.l + 'δ；对 ℙ¹ 中例外点之外的每个 λ 各有一个）';
+    else where = '，正则模，在例外管 ' + it.tube.index + '（rank ' + it.tube.rank + '）中，拟长度 ' + it.l +
+      (it.l === 1 ? '（正则单模）' : '') + (it.l % it.tube.rank === 0 ? '，dim 是 δ 的倍数' : '');
+    box.append(code, '，总维数 ' + total + where);
     box.append(document.createElement('br'));
     box.append('直接前驱：' + (preds.join('，') || '无') + '；直接后继：' + (succs.join('，') || '无'));
   }
@@ -1283,6 +1402,7 @@
   $('pa-L').addEventListener('input', () => { if (parseInt($('pa-L').value, 10) >= 1) render(); });
   $('btn-ar').addEventListener('click', openAR);
   ['ar-label', 'ar-tau'].forEach((id) => $(id).addEventListener('change', drawAR));
+  $('ar-reg').addEventListener('change', () => { arSel = null; arScale = null; drawAR(); });
   $('ar-layers').addEventListener('input', () => {
     if (parseInt($('ar-layers').value, 10) >= 1) { arSel = null; arScale = null; drawAR(); renderARSummary(); }
   });

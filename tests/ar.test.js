@@ -126,3 +126,68 @@ console.log('all AR tests passed');
   assert.strictEqual(AR.findCycle([[0, 1], [0, 0]]), null);
   console.log('findCycle ok');
 }
+
+// ---- 正则分支：Euclidean 型的管
+{
+  const cycleEdges = (m) => Array.from({ length: m }, (_, i) => [i, (i + 1) % m]);
+  const cases = [];
+  for (let m = 2; m <= 7; m++) cases.push({ name: 'Ã' + (m - 1), n: m, e: cycleEdges(m), ranks: null });
+  for (let k = 4; k <= 8; k++) {
+    // D̃_k：k+1 个顶点，两个三叉点各带两片叶子
+    const e = [];
+    for (let i = 0; i < k - 2; i++) e.push([i, i + 1]);
+    e.push([0, k - 1], [k - 2, k]);
+    // k = 4 时 0 与 2 并不相邻 —— 用星形
+    const edges = k === 4 ? [[0, 1], [0, 2], [0, 3], [0, 4]] : (() => {
+      const f = []; // 主干 0 - 1 - … - (k-4)，0 上挂 k-3, k-2，末端挂 k-1, k
+      for (let i = 0; i < k - 4; i++) f.push([i, i + 1]);
+      f.push([0, k - 3], [0, k - 2], [k - 4, k - 1], [k - 4, k]);
+      return f;
+    })();
+    cases.push({ name: 'D̃' + k, n: k + 1, e: edges, ranks: [2, 2, k - 2].filter((r) => r > 1).sort((a, b) => a - b) });
+  }
+  [[[2, 2, 2], [2, 3, 3], 'Ẽ6'], [[1, 3, 3], [2, 3, 4], 'Ẽ7'], [[1, 2, 5], [2, 3, 5], 'Ẽ8']].forEach(([arms, ranks, name]) => {
+    const s = star(arms); cases.push({ name, n: s.n, e: s.e, ranks });
+  });
+  for (const c of cases) {
+    for (let rep = 0; rep < 12; rep++) {
+      const perm = shuffle(c.n);
+      const A = Array.from({ length: c.n }, () => new Array(c.n).fill(0));
+      let cw = 0, ccw = 0;
+      c.e.forEach(([a, b]) => {
+        if (Math.random() < 0.5) { A[perm[a]][perm[b]] += 1; cw++; } else { A[perm[b]][perm[a]] += 1; ccw++; }
+      });
+      if (c.name.startsWith('Ã') && (cw === 0 || ccw === 0)) { // 有向圈，换一个定向
+        const [a, b] = c.e[0];
+        if (cw === 0) { A[perm[b]][perm[a]] -= 1; A[perm[a]][perm[b]] += 1; cw = 1; ccw--; }
+        else { A[perm[a]][perm[b]] -= 1; A[perm[b]][perm[a]] += 1; ccw = 1; cw--; }
+      }
+      const res = AR.arQuiver(A, { layers: 3 });
+      assert(res.ok && res.comps.length === 1 && res.comps[0].kind === 'euclidean', c.name);
+      const reg = res.comps[0].regular;
+      assert(reg && reg.ok, c.name + ' regular');
+      const ranks = reg.tubes.map((t) => t.rank);
+      const expect = c.ranks || [cw, ccw].filter((r) => r > 1).sort((a, b) => a - b);
+      assert.deepStrictEqual(ranks, expect, c.name + ' tube ranks');
+      assert.strictEqual(ranks.reduce((s, r) => s + r - 1, 0), c.n - 2, c.name + ' Σ(r−1) = n−2');
+      // δ 在 Tits 型的根基中
+      assert.strictEqual(titsBig(A, reg.delta), 0n);
+      const t = AR.tubes(A, res.P, res.comps[0].verts);
+      for (const tube of reg.tubes) {
+        const r = tube.rank;
+        for (let k = 0; k < r; k++) {
+          // τ 的作用：Φ(simples[k]) = simples[k+1]
+          assert.deepStrictEqual(t.phi(tube.simples[k]), tube.simples[(k + 1) % r]);
+          for (let l = 1; l <= r + 1; l++) {
+            const d = AR.tubeModuleDim(tube, k, l);
+            assert.strictEqual(euler(A, reg.delta, d), 0, 'defect 0');
+            assert.strictEqual(titsBig(A, d), l % r === 0 ? 0n : 1n, 'real / imaginary root');
+          }
+        }
+      }
+      // Φ 与编织算法一致：dim τX = Φ dim X
+      res.tau.forEach(({ from, to }) => assert.deepStrictEqual(t.phi(res.nodes[from].dim), res.nodes[to].dim, 'Φ = τ'));
+    }
+  }
+  console.log('tubes ok');
+}

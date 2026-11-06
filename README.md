@@ -14,7 +14,7 @@
 - **分步演示**：把变异拆成三步动画展示——补全路径 i → k → j、反转与 k 相连的箭头、删除 2-圈（以及冰冻顶点之间的箭头）。
 - **交换矩阵**：实时显示扩展交换矩阵 B̃（或完整斜对称矩阵），并可直接编辑。
 - **路代数**：计算路代数 kQ 的维数（Q 有向圈时为无穷维，可改用截断 kQ/R^L），以及每个顶点的不可分解投射模 P(i)、不可分解内射模 I(i)、单模 S(i) 的维数向量和维数；可在画布上标出维数向量，并查看 P(i) 的根层、I(i) 的基座层。
-- **Auslander–Reiten 箭图**：对无圈箭图的路代数 kQ，用编织（knitting）算法计算 AR 箭图，并判别底图类型（Dynkin / Euclidean / wild）。Dynkin 型（A/D/E）画出全部不可分解模（个数等于正根个数）；Euclidean 和 wild 型画出预投射、预内射分支的前若干层。可显示维数向量或 τ 轨道名称，点击模查看其维数向量、同构的投射/内射/单模、直接前驱和后继。
+- **Auslander–Reiten 箭图**：对无圈箭图的路代数 kQ，用编织（knitting）算法计算 AR 箭图，并判别底图类型（Dynkin / Euclidean / wild）。Dynkin 型（A/D/E）画出全部不可分解模（个数等于正根个数）；Euclidean 型还画出正则分支：用零根 δ、亏量和 Coxeter 变换求出例外管（rank 与 Ã_{p,q}: p, q；D̃ₙ: 2, 2, n−2；Ẽ₆/₇/₈: 2,3,3 / 2,3,4 / 2,3,5 一致）及齐次管；wild 型画出预投射、预内射分支的前若干层（正则分支为无穷多个 ℤA∞ 型分支，不画出）。可显示维数向量或 τ 轨道名称，点击模查看其维数向量、同构的投射/内射/单模、直接前驱和后继。
 - **示例**：A₃、A₄、D₄、三角循环、Kronecker、Markov、A₂/A₃ 加主系数、Gr(2,5)、Gr(2,6) 的冰箭图。
 - **导入/导出**：JSON、斜对称矩阵文本、TikZ 代码。
 
@@ -37,5 +37,5 @@ b'_ij = b_ij + (|b_ik| b_kj + b_ik |b_kj|) / 2  否则
 
 - `index.html`、`style.css`、`app.js`：页面与交互
 - `quiver-core.js`：变异与路代数的数学核心（浏览器与 Node 通用）
-- `ar-core.js`：AR 箭图（编织算法、底图分类、布局）
+- `ar-core.js`：AR 箭图（编织算法、底图分类、正则分支的管、布局）
 - `tests/core.test.js`、`tests/ar.test.js`：测试，运行 `node tests/core.test.js && node tests/ar.test.js`
