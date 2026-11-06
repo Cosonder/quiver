@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quiver Mutation</title>
+  <meta name="description" content="在浏览器中绘制箭图（quiver）与冰箭图（ice quiver），并演示箭图变异（quiver mutation）。">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Quiver Mutation</h1>
+      <span class="subtitle">箭图 · 冰箭图 · 变异演示</span>
+    </div>
+    <div class="top-actions">
+      <button id="btn-undo" title="撤销 (Ctrl+Z)">↶ 撤销</button>
+      <button id="btn-redo" title="重做 (Ctrl+Y)">↷ 重做</button>
+      <button id="btn-io" title="导入 / 导出">⇅ 导入/导出</button>
+      <button id="btn-help" title="帮助">? 帮助</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左侧：工具 -->
+    <aside class="panel left">
+      <section>
+        <h2>工具</h2>
+        <div class="tools" role="radiogroup" aria-label="编辑工具">
+          <button class="tool" data-mode="move" title="选择 / 拖动 (S)"><span class="ico">✥</span>选择/移动<kbd>S</kbd></button>
+          <button class="tool" data-mode="vertex" title="添加顶点 (V)，Shift+点击添加冰冻顶点"><span class="ico">○</span>添加顶点<kbd>V</kbd></button>
+          <button class="tool" data-mode="frozenVertex" title="添加冰冻顶点 (I)"><span class="ico">□</span>冰冻顶点<kbd>I</kbd></button>
+          <button class="tool" data-mode="arrow" title="添加箭头 (A)：从起点拖到终点"><span class="ico">→</span>添加箭头<kbd>A</kbd></button>
+          <button class="tool" data-mode="freeze" title="切换冰冻/可变 (F)"><span class="ico">❄</span>冰冻切换<kbd>F</kbd></button>
+          <button class="tool" data-mode="delete" title="删除顶点或箭头 (D)"><span class="ico">✕</span>删除<kbd>D</kbd></button>
+          <button class="tool tool-mutate" data-mode="mutate" title="点击顶点进行变异 (M)"><span class="ico">μ</span>变异<kbd>M</kbd></button>
+        </div>
+        <p class="hint" id="mode-hint"></p>
+      </section>
+
+      <section>
+        <h2>变异</h2>
+        <label class="check"><input type="checkbox" id="opt-steps"> 分步演示变异过程</label>
+        <div class="row">
+          <input id="seq-input" type="text" placeholder="变异序列，如 1 2 1" aria-label="变异序列">
+          <button id="btn-seq">执行</button>
+        </div>
+        <div class="row">
+          <button id="btn-random">随机变异</button>
+          <button id="btn-seed">回到初始种子</button>
+        </div>
+        <div class="seq-log" id="seq-log"></div>
+      </section>
+
+      <section>
+        <h2>冰箭图</h2>
+        <div class="row wrap">
+          <button id="btn-principal" title="为每个可变顶点 i 添加冰冻顶点 i′ 和箭头 i → i′">添加主系数</button>
+          <button id="btn-coprincipal" title="为每个可变顶点 i 添加冰冻顶点 i′ 和箭头 i′ → i">添加对偶系数</button>
+          <button id="btn-unfreeze">解冻全部</button>
+          <button id="btn-remove-frozen">删除冰冻顶点</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>示例</h2>
+        <select id="preset" aria-label="示例箭图">
+          <option value="">— 选择示例 —</option>
+          <option value="A3">A₃（线性）</option>
+          <option value="A4">A₄（交错定向）</option>
+          <option value="D4">D₄</option>
+          <option value="cyc3">三角循环（A₃ 的变异）</option>
+          <option value="kronecker">Kronecker 箭图</option>
+          <option value="markov">Markov 箭图</option>
+          <option value="A2prin">A₂ + 主系数（冰箭图）</option>
+          <option value="A3prin">A₃ + 主系数（冰箭图）</option>
+          <option value="gr25">Gr(2,5)（五边形三角剖分，冰箭图）</option>
+          <option value="gr26">Gr(2,6)（六边形三角剖分，冰箭图）</option>
+          <option value="empty">清空</option>
+        </select>
+        <div class="row">
+          <button id="btn-layout">圆形排布</button>
+          <button id="btn-fit">适应画布</button>
+          <button id="btn-clear">清空画布</button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- 中间：画布 -->
+    <section class="canvas-wrap">
+      <svg id="canvas" aria-label="箭图画布" role="img">
+        <defs>
+          <marker id="ah-base" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah base"/></marker>
+          <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah blue"/></marker>
+          <marker id="ah-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah green"/></marker>
+          <marker id="ah-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah orange"/></marker>
+          <marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah red"/></marker>
+          <marker id="ah-temp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah temp"/></marker>
+        </defs>
+        <g id="layer-edges"></g>
+        <g id="layer-temp"></g>
+        <g id="layer-vertices"></g>
+      </svg>
+      <div class="empty-hint" id="empty-hint">
+        <p><b>双击</b>空白处添加顶点，选择 <b>添加箭头</b> 工具后从一个顶点拖到另一个顶点画箭头。</p>
+        <p>或者从左侧 <b>示例</b> 中选择一个箭图。</p>
+      </div>
+
+      <div class="stage-bar" id="stage-bar" hidden>
+        <div class="stage-text">
+          <div class="stage-title" id="stage-title"></div>
+          <div class="stage-desc" id="stage-desc"></div>
+        </div>
+        <div class="stage-controls">
+          <button id="stage-prev" aria-label="上一步">◀</button>
+          <span id="stage-count"></span>
+          <button id="stage-next" aria-label="下一步">▶</button>
+          <button id="stage-play">自动播放</button>
+          <button id="stage-close">完成</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><svg width="18" height="18"><circle cx="9" cy="9" r="7" class="lg-mut"/></svg>可变顶点</span>
+        <span><svg width="18" height="18"><rect x="2" y="2" width="14" height="14" class="lg-frz"/></svg>冰冻顶点</span>
+      </div>
+    </section>
+
+    <!-- 右侧：矩阵、信息 -->
+    <aside class="panel right">
+      <section id="sel-section" hidden>
+        <h2>选中顶点</h2>
+        <div class="row">
+          <label for="sel-label">标签</label>
+          <input id="sel-label" type="text" maxlength="8">
+        </div>
+        <label class="check"><input type="checkbox" id="sel-frozen"> 冰冻顶点</label>
+        <div class="row">
+          <button id="sel-mutate">在此变异 μ</button>
+          <button id="sel-delete">删除</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>交换矩阵</h2>
+        <label class="check"><input type="checkbox" id="opt-full"> 显示完整斜对称矩阵</label>
+        <p class="hint" id="matrix-caption"></p>
+        <div class="matrix-scroll"><table id="matrix" class="matrix"></table></div>
+        <p class="hint">可直接编辑矩阵元素，b<sub>ij</sub> = i→j 箭头数 − j→i 箭头数。</p>
+      </section>
+
+      <section>
+        <h2>统计</h2>
+        <dl class="stats" id="stats"></dl>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="dlg-io">
+    <form method="dialog" class="dlg">
+      <h2>导入 / 导出</h2>
+      <div class="row wrap">
+        <button type="button" id="io-json">导出 JSON</button>
+        <button type="button" id="io-tikz">导出 TikZ</button>
+        <button type="button" id="io-matrix">导出矩阵</button>
+        <button type="button" id="io-copy">复制</button>
+      </div>
+      <textarea id="io-text" spellcheck="false" rows="14" aria-label="导入导出内容"></textarea>
+      <p class="hint">导入支持本页导出的 JSON，或斜对称整数矩阵（每行一行，空格分隔；可在首行写 <code>frozen: 4 5</code> 指定冰冻顶点编号）。</p>
+      <div class="row end">
+        <button type="button" id="io-import" class="primary">导入</button>
+        <button value="close">关闭</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-help">
+    <form method="dialog" class="dlg help">
+      <h2>使用说明</h2>
+      <h3>绘制</h3>
+      <ul>
+        <li><b>双击</b>空白处添加可变顶点；<b>Shift + 双击</b>添加冰冻顶点（方框）。</li>
+        <li><b>添加箭头</b>：从起点按住拖到终点，或先点起点再点终点。重复画可得多重箭头；画相反方向的箭头会互相抵消（箭图不含 2-圈）。</li>
+        <li><b>删除</b>工具点击箭头每次删除一条，点击顶点删除该顶点。</li>
+        <li>在 <b>选择/移动</b> 工具下拖动顶点，<b>双击顶点</b>即在该点变异。</li>
+      </ul>
+      <h3>变异 μ<sub>k</sub></h3>
+      <ol>
+        <li>对每条路径 i → k → j 添加箭头 i → j；</li>
+        <li>反转所有与 k 相连的箭头；</li>
+        <li>删除所有 2-圈。</li>
+      </ol>
+      <p>矩阵形式：b′<sub>ij</sub> = −b<sub>ij</sub>（i = k 或 j = k），否则 b′<sub>ij</sub> = b<sub>ij</sub> + (|b<sub>ik</sub>|b<sub>kj</sub> + b<sub>ik</sub>|b<sub>kj</sub>|)/2。</p>
+      <h3>冰箭图</h3>
+      <p>冰箭图中部分顶点是<b>冰冻顶点</b>（方框）：不能在冰冻顶点处变异，冰冻顶点之间的箭头被忽略，变异后也会被删除。交换矩阵 B̃ 只保留可变顶点对应的列（行为全部顶点）。
+        「添加主系数」为每个可变顶点 i 添加冰冻顶点 i′ 和箭头 i → i′，此时冰冻部分的列给出 c-向量。</p>
+      <h3>快捷键</h3>
+      <p><kbd>S</kbd> 选择 · <kbd>V</kbd> 顶点 · <kbd>I</kbd> 冰冻顶点 · <kbd>A</kbd> 箭头 · <kbd>F</kbd> 冰冻切换 · <kbd>D</kbd> 删除 · <kbd>M</kbd> 变异 · <kbd>Delete</kbd> 删除选中 · <kbd>Ctrl+Z / Ctrl+Y</kbd> 撤销/重做 · 分步演示时 <kbd>←</kbd>/<kbd>→</kbd> 切换步骤</p>
+      <div class="row end"><button value="close" class="primary">知道了</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="quiver-core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
