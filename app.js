@@ -655,9 +655,11 @@
     const ar = value.ar, info = value.info;
     if (!ar.ok) {
       if (ar.reason === 'empty') return '没有顶点。';
-      const hasFrozen = state.vertices.some((v) => v.frozen);
-      return 'Q 含有向圈，kQ 无穷维；AR 箭图只对无圈箭图的路代数计算' +
-        (hasFrozen && !info.opts.mutableOnly ? '（冰箭图可以勾选「只用可变部分」试试）' : '') + '。';
+      const esc = (t) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+      const cyc = (ar.cycle || []).map((a) => vlabel(info, a));
+      const cycText = cyc.length ? '（例如 ' + esc(cyc.concat(cyc[0]).join(' → ')) + '）' : '';
+      return '<span class="ar-warn">当前箭图含有向圈' + cycText + '，kQ 是无穷维的，无法计算 AR 箭图。</span>' +
+        '目前只支持无圈箭图的路代数。';
     }
     const kindName = { dynkin: '', euclidean: ' Euclidean', wild: '' };
     const names = ar.comps.map((c) => c.name + kindName[c.kind]).join(' ⊔ ');
@@ -674,7 +676,38 @@
   function renderARSummary() {
     const value = computeAR();
     $('ar-summary').innerHTML = arSummary(value);
-    $('btn-ar').disabled = !value.ar.ok;
+    $('btn-ar').disabled = false;
+    $('btn-ar').textContent = value.ar.ok ? '查看 AR 箭图' : '查看 AR 箭图（当前不可计算）';
+  }
+
+  /** 箭图有圈时，给出可以得到无圈箭图的操作 */
+  function arFixes(value) {
+    const box = $('ar-info');
+    box.innerHTML = '';
+    if (value.ar.reason !== 'cyclic') return;
+    box.append('可以试试：');
+    const add = (text, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = text;
+      b.className = 'ar-fix';
+      b.addEventListener('click', () => { fn(); arSel = null; arScale = null; drawAR(); });
+      box.append(b);
+    };
+    const info = value.info;
+    if (!info.opts.mutableOnly && state.vertices.some((v) => v.frozen)) {
+      const mut = [];
+      state.vertices.forEach((v, i) => { if (!v.frozen) mut.push(i); });
+      const A = mut.map((i) => mut.map((j) => Math.max(state.B[i][j], 0)));
+      if (mut.length && AR.topoOrder(A)) add('只用可变部分（可变部分无圈）', () => { $('pa-mutable').checked = true; render(); });
+    }
+    if (state.seed) add('回到初始种子', backToSeed);
+    if (undoStack.length) add('撤销上一步', undo);
+    add('打开示例 A₃', () => loadPreset('A3'));
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = '变异常常会产生有向圈；箭图无圈时（例如 Dynkin 型箭图的某些定向）才能计算 AR 箭图。';
+    box.append(p);
   }
 
   function openAR() {
@@ -693,10 +726,12 @@
     $('ar-desc').innerHTML = arSummary(value);
     $('ar-layers-wrap').hidden = !ar.ok || ar.finite;
     $('ar-order').textContent = ar.ok ? '维数向量分量顺序：(' + info.verts.map((i) => state.vertices[i].label).join(', ') + ')' : '';
+    document.querySelectorAll('.ar-controls, #ar-scroll, .ar-legend').forEach((x) => { x.hidden = !ar.ok; });
+    $('dlg-ar').classList.toggle('compact', !ar.ok);
     if (!ar.ok) {
       svgAR.setAttribute('width', 0);
       svgAR.setAttribute('height', 0);
-      $('ar-info').textContent = '';
+      arFixes(value);
       return;
     }
     const nodes = ar.nodes;

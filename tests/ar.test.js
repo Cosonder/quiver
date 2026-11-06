@@ -117,3 +117,12 @@ for (let t = 0; t < 300; t++) {
 // ---- 有向圈：拒绝
 assert.strictEqual(AR.arQuiver([[0, 1], [1, 0]]).reason, 'cyclic');
 console.log('all AR tests passed');
+
+// ---- 有向圈的具体例子
+{
+  const c = AR.findCycle([[0, 1, 0], [0, 0, 1], [1, 0, 0]]);
+  assert.strictEqual(c.length, 3);
+  for (let t = 0; t < 3; t++) assert.strictEqual([[0, 1, 0], [0, 0, 1], [1, 0, 0]][c[t]][c[(t + 1) % 3]], 1, 'cycle edges');
+  assert.strictEqual(AR.findCycle([[0, 1], [0, 0]]), null);
+  console.log('findCycle ok');
+}

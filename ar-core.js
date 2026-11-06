@@ -67,6 +67,27 @@
     return order.length === n ? order : null;
   }
 
+  /** 找出一个有向圈，返回顶点序列 [v0, v1, …, vk]（vk → v0），无圈时返回 null */
+  function findCycle(A) {
+    const n = A.length;
+    const color = new Array(n).fill(0); // 0 未访问，1 在栈中，2 已完成
+    const stack = [];
+    let found = null;
+    const dfs = (u) => {
+      color[u] = 1;
+      stack.push(u);
+      for (let v = 0; v < n && !found; v++) {
+        if (!(A[u][v] > 0)) continue;
+        if (color[v] === 1) found = stack.slice(stack.indexOf(v));
+        else if (color[v] === 0) dfs(v);
+      }
+      stack.pop();
+      color[u] = 2;
+    };
+    for (let s = 0; s < n && !found; s++) if (color[s] === 0) dfs(s);
+    return found;
+  }
+
   /**
    * 连通分支的底图分类。
    * 返回 { name, kind: 'dynkin' | 'euclidean' | 'wild', count }，
@@ -241,7 +262,7 @@
     const R = Math.max(1, Math.min(Math.floor(opts.layers || 4), 40));
     if (!n) return { ok: false, reason: 'empty' };
     const order = topoOrder(A);
-    if (!order) return { ok: false, reason: 'cyclic' };
+    if (!order) return { ok: false, reason: 'cyclic', cycle: findCycle(A) };
     const sinkFirst = order.slice().reverse();
     const unit = (i) => { const v = new Array(n).fill(0); v[i] = 1; return v; };
 
@@ -395,6 +416,7 @@
   const api = {
     components: components,
     topoOrder: topoOrder,
+    findCycle: findCycle,
     classify: classify,
     titsForm: titsForm,
     arQuiver: arQuiver

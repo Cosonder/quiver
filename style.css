@@ -327,6 +327,7 @@ select { width: 100%; }
 .ar-box .hint { margin: 0 0 6px; }
 .ar-box button { width: 100%; }
 dialog.dlg-wide { width: min(1200px, calc(100% - 24px)); height: calc(100% - 32px); }
+dialog.dlg-wide.compact { height: auto; width: min(640px, calc(100% - 24px)); }
 .ar-dlg { display: flex; flex-direction: column; height: 100%; gap: 6px; }
 .ar-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ar-top h2 { margin: 0; }
@@ -367,6 +368,9 @@ dialog.dlg-wide { width: min(1200px, calc(100% - 24px)); height: calc(100% - 32p
 .ar-legend .sw.projinj { border-color: var(--green); }
 .ar-order { margin-left: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ar-info { font-size: 13px; min-height: 2.6em; }
+.ar-warn { color: var(--orange); }
+.ar-fix { margin: 4px 6px 0 0; }
+.ar-dlg .ar-desc .ar-warn { display: block; font-size: 14px; font-weight: 600; margin: 4px 0; }
 .ar-info b { font-weight: 600; }
 .ar-info code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
