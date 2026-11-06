@@ -429,6 +429,11 @@
     A3: { verts: [['1', -2, -0.5], ['2', 0, 0.7], ['3', 2, -0.5]], arrows: [['1', '2', 1], ['2', '3', 1]] },
     A4: { verts: [['1', -3, -0.5], ['2', -1, 0.6], ['3', 1, -0.5], ['4', 3, 0.6]], arrows: [['1', '2', 1], ['3', '2', 1], ['3', '4', 1]] },
     D4: { verts: [['1', -1.8, -1.2], ['2', 0, 0], ['3', 1.8, -1.2], ['4', 0, 2]], arrows: [['1', '2', 1], ['3', '2', 1], ['4', '2', 1]] },
+    E6: {
+      verts: [['1', -2.6, 0.6], ['2', -1.3, 0.6], ['3', 0, 0.6], ['4', 1.3, 0.6], ['5', 2.6, 0.6], ['6', 0, -0.9]],
+      arrows: [['1', '2', 1], ['2', '3', 1], ['4', '3', 1], ['5', '4', 1], ['6', '3', 1]]
+    },
+    A2tilde: { verts: [['1', -1.8, 1], ['2', 0, -1.6], ['3', 1.8, 1]], arrows: [['1', '2', 1], ['2', '3', 1], ['1', '3', 1]] },
     cyc3: { verts: [['1', -1.7, 1], ['2', 0, -1.9], ['3', 1.7, 1]], arrows: [['1', '2', 1], ['2', '3', 1], ['3', '1', 1]] },
     kronecker: { verts: [['1', -1.5, 0], ['2', 1.5, 0]], arrows: [['1', '2', 2]] },
     markov: { verts: [['1', -1.9, 1.1], ['2', 0, -2.1], ['3', 1.9, 1.1]], arrows: [['1', '2', 2], ['2', '3', 2], ['3', '1', 2]] },
@@ -575,6 +580,8 @@
     }
     $('pa-table').innerHTML = t;
 
+    renderARSummary();
+
     // 根层 / 基座层
     const box = $('pa-layers');
     box.innerHTML = '';
@@ -607,6 +614,215 @@
         : '自下第 l 层 = 长度为 l、终点为 ' + label + ' 的路的起点。';
       box.appendChild(hint);
     }
+  }
+
+  // ---------------------------------------------------------------- AR 箭图
+  const AR = window.ARCore;
+  let arScale = null;   // null = 适应窗口
+  let arSel = null;     // 选中的 AR 顶点 id
+  let arCache = { key: null, value: null };
+
+  function arLayers() {
+    const L = parseInt($('ar-layers').value, 10);
+    return Math.max(1, Math.min(12, L >= 1 ? L : 4));
+  }
+
+  function computeAR() {
+    const info = computePA();
+    const layers = arLayers();
+    const key = JSON.stringify([state.B, info.verts, layers]);
+    if (arCache.key === key) return arCache.value;
+    const A = info.verts.map((i) => info.verts.map((j) => Math.max(state.B[i][j], 0)));
+    const ar = info.verts.length ? AR.arQuiver(A, { layers: layers }) : { ok: false, reason: 'empty' };
+    const value = { ar: ar, info: info };
+    arCache = { key: key, value: value };
+    return value;
+  }
+
+  const vlabel = (info, a) => state.vertices[info.verts[a]].label;
+
+  function arNodeName(nd, info) {
+    const l = vlabel(info, nd.i);
+    if (nd.kind === 'P') return nd.r === 0 ? 'P' + l : 'τ⁻' + sup(nd.r) + 'P' + l;
+    return nd.r === 0 ? 'I' + l : 'τ' + (nd.r === 1 ? '' : sup(nd.r)) + 'I' + l;
+  }
+
+  function dimLabel(dim) {
+    return dim.length <= 12 && dim.every((x) => x < 10) ? dim.join('') : dim.join(',');
+  }
+
+  function arSummary(value) {
+    const ar = value.ar, info = value.info;
+    if (!ar.ok) {
+      if (ar.reason === 'empty') return '没有顶点。';
+      const hasFrozen = state.vertices.some((v) => v.frozen);
+      return 'Q 含有向圈，kQ 无穷维；AR 箭图只对无圈箭图的路代数计算' +
+        (hasFrozen && !info.opts.mutableOnly ? '（冰箭图可以勾选「只用可变部分」试试）' : '') + '。';
+    }
+    const kindName = { dynkin: '', euclidean: ' Euclidean', wild: '' };
+    const names = ar.comps.map((c) => c.name + kindName[c.kind]).join(' ⊔ ');
+    let html;
+    if (ar.finite) {
+      html = '有限表示型（' + names + '），共 <b>' + ar.total + '</b> 个不可分解模（与正根一一对应）。';
+    } else {
+      html = '无限表示型（' + names + '）。画出预投射、预内射分支的前 ' + ar.layers + ' 层，规则分支未画出。';
+    }
+    if (info.opts.trunc) html += ' 注：按无关系的 kQ 计算，不考虑截断。';
+    return html;
+  }
+
+  function renderARSummary() {
+    const value = computeAR();
+    $('ar-summary').innerHTML = arSummary(value);
+    $('btn-ar').disabled = !value.ar.ok;
+  }
+
+  function openAR() {
+    arSel = null;
+    arScale = null;
+    $('dlg-ar').showModal();
+    drawAR();
+  }
+
+  function drawAR() {
+    const value = computeAR();
+    const ar = value.ar, info = value.info;
+    const eE = $('ar-edges'), eN = $('ar-nodes'), svgAR = $('ar-canvas');
+    eE.textContent = '';
+    eN.textContent = '';
+    $('ar-desc').innerHTML = arSummary(value);
+    $('ar-layers-wrap').hidden = !ar.ok || ar.finite;
+    $('ar-order').textContent = ar.ok ? '维数向量分量顺序：(' + info.verts.map((i) => state.vertices[i].label).join(', ') + ')' : '';
+    if (!ar.ok) {
+      svgAR.setAttribute('width', 0);
+      svgAR.setAttribute('height', 0);
+      $('ar-info').textContent = '';
+      return;
+    }
+    const nodes = ar.nodes;
+    if (arSel != null && !nodes[arSel]) arSel = null;
+    const mode = $('ar-label').value;
+    const text = (nd) => (mode === 'name' ? arNodeName(nd, info) : dimLabel(nd.dim));
+    const widths = nodes.map((nd) => Math.max(26, text(nd).length * 7.4 + 12));
+    const maxW = Math.max.apply(null, widths);
+    const UX = Math.max(26, (maxW + 12) / 2), UY = 46, PAD = 34, HH = 11;
+    const multi = ar.comps.length > 1;
+    const minX = Math.min.apply(null, nodes.map((nd) => nd.x));
+    const maxX = Math.max.apply(null, nodes.map((nd) => nd.x));
+    const maxRow = Math.max.apply(null, nodes.map((nd) => nd.row));
+    const left = PAD + maxW / 2 + (multi ? 40 : 0);
+    const pos = (nd) => ({ X: left + (nd.x - minX) * UX, Y: PAD + nd.row * UY });
+    const W = left + (maxX - minX) * UX + PAD + maxW / 2;
+    const H = PAD * 2 + maxRow * UY;
+
+    // 邻居
+    const nb = new Set();
+    if (arSel != null) {
+      ar.edges.forEach((e) => {
+        if (e.from === arSel) nb.add(e.to);
+        if (e.to === arSel) nb.add(e.from);
+      });
+    }
+
+    const trim = (w, dx, dy) => Math.min(Math.abs(dx) > 1e-9 ? w / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-9 ? (HH + 3) / Math.abs(dy) : Infinity);
+
+    // τ（虚线）
+    if ($('ar-tau').checked) {
+      ar.tau.forEach((t) => {
+        const a = nodes[t.from], b = nodes[t.to];
+        const p = pos(a), q = pos(b);
+        el('line', { x1: p.X - widths[a.id] / 2 - 3, y1: p.Y, x2: q.X + widths[b.id] / 2 + 3, y2: q.Y, class: 'ar-tau' }, eE);
+      });
+    }
+
+    // 不可约映射
+    ar.edges.forEach((e) => {
+      const a = nodes[e.from], b = nodes[e.to];
+      const p = pos(a), q = pos(b);
+      const hl = arSel != null && (e.from === arSel || e.to === arSel);
+      const dx = q.X - p.X, dy = q.Y - p.Y, len = Math.hypot(dx, dy);
+      const nx = -dy / len, ny = dx / len;
+      const bend = Math.abs(a.row - b.row) >= 2 ? 0.22 * len : 0;
+      const m = e.mult <= 3 ? e.mult : 1;
+      for (let t = 0; t < m; t++) {
+        const off = (t - (m - 1) / 2) * 5;
+        const P1 = { x: p.X + nx * off, y: p.Y + ny * off }, P2 = { x: q.X + nx * off, y: q.Y + ny * off };
+        const C = { x: (p.X + q.X) / 2 + nx * (bend + off), y: (p.Y + q.Y) / 2 + ny * (bend + off) };
+        let d1x = C.x - P1.x, d1y = C.y - P1.y, l1 = Math.hypot(d1x, d1y); d1x /= l1; d1y /= l1;
+        let d2x = C.x - P2.x, d2y = C.y - P2.y, l2 = Math.hypot(d2x, d2y); d2x /= l2; d2y /= l2;
+        const t1 = trim(widths[a.id] / 2 + 3, d1x, d1y), t2 = trim(widths[b.id] / 2 + 5, d2x, d2y);
+        const S = { x: P1.x + d1x * t1, y: P1.y + d1y * t1 }, E = { x: P2.x + d2x * t2, y: P2.y + d2y * t2 };
+        const d = bend ? 'M' + S.x + ',' + S.y + ' Q' + C.x + ',' + C.y + ' ' + E.x + ',' + E.y : 'M' + S.x + ',' + S.y + ' L' + E.x + ',' + E.y;
+        el('path', { d: d, class: 'ar-edge' + (hl ? ' hl' : '') + (e.mult > 3 ? ' thick' : ''), 'marker-end': 'url(#' + (hl ? 'ar-ah-hl' : 'ar-ah') + ')' }, eE);
+      }
+      if (e.mult > 3) {
+        const cx = (p.X + q.X) / 2 + nx * bend * 0.5, cy = (p.Y + q.Y) / 2 + ny * bend * 0.5;
+        el('circle', { cx: cx, cy: cy, r: 9, class: 'edge-label-bg' }, eE);
+        el('text', { x: cx, y: cy, class: 'edge-label' }, eE).textContent = String(e.mult);
+      }
+    });
+
+    // 分支名称与规则分支的位置
+    ar.comps.forEach((c) => {
+      const yMid = PAD + (c.rowStart + (c.rows - 1) / 2) * UY;
+      if (multi) el('text', { x: 8, y: yMid, class: 'ar-comp', 'dominant-baseline': 'central' }, eN).textContent = c.name;
+      if (c.gapX != null) {
+        el('text', { x: left + (c.gapX - minX) * UX, y: yMid, class: 'ar-gap' }, eN).textContent = '⋯ 规则分支 ⋯';
+      }
+    });
+
+    // 模
+    nodes.forEach((nd) => {
+      const p = pos(nd);
+      let cls = 'ar-node';
+      if (nd.proj >= 0) cls += ' proj';
+      if (nd.inj >= 0) cls += ' inj';
+      if (nd.simple) cls += ' simple';
+      if (nd.id === arSel) cls += ' sel';
+      else if (nb.has(nd.id)) cls += ' nb';
+      const g = el('g', { class: cls, transform: 'translate(' + p.X + ',' + p.Y + ')', 'data-ar': nd.id }, eN);
+      el('title', {}, g).textContent = arNodeName(nd, info) + '  dim = (' + nd.dim.join(', ') + ')';
+      el('rect', { x: -widths[nd.id] / 2, y: -HH, width: widths[nd.id], height: 2 * HH, rx: 5 }, g);
+      el('text', {}, g).textContent = text(nd);
+    });
+
+    // 缩放
+    const box = $('ar-scroll');
+    if (arScale == null) {
+      const fit = Math.min((box.clientWidth - 6) / W, (box.clientHeight - 6) / H);
+      arScale = Math.max(0.3, Math.min(1.4, isFinite(fit) && fit > 0 ? fit : 1));
+    }
+    svgAR.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svgAR.setAttribute('width', Math.round(W * arScale));
+    svgAR.setAttribute('height', Math.round(H * arScale));
+
+    renderARInfo(value);
+  }
+
+  function renderARInfo(value) {
+    const ar = value.ar, info = value.info;
+    const box = $('ar-info');
+    if (arSel == null) {
+      box.textContent = '点击一个模查看详情，同时高亮它的直接前驱与后继。共 ' + ar.nodes.length + ' 个模（图中）。';
+      return;
+    }
+    const nd = ar.nodes[arSel];
+    const parts = [arNodeName(nd, info)];
+    if ((nd.kind === 'I' || nd.r > 0) && nd.proj >= 0) parts.push('P' + vlabel(info, nd.proj));
+    if ((nd.kind === 'P' || nd.r > 0) && nd.inj >= 0) parts.push('I' + vlabel(info, nd.inj));
+    if (nd.simple) parts.push('S' + vlabel(info, nd.dim.indexOf(1)));
+    const preds = ar.edges.filter((e) => e.to === nd.id).map((e) => arNodeName(ar.nodes[e.from], info) + (e.mult > 1 ? sup(e.mult) : ''));
+    const succs = ar.edges.filter((e) => e.from === nd.id).map((e) => arNodeName(ar.nodes[e.to], info) + (e.mult > 1 ? sup(e.mult) : ''));
+    const total = nd.dim.reduce((a, b) => a + b, 0);
+    box.innerHTML = '';
+    const b = document.createElement('b');
+    b.textContent = parts.join(' ≅ ');
+    box.append(b, '　dim = ');
+    const code = document.createElement('code');
+    code.textContent = '(' + nd.dim.join(', ') + ')';
+    box.append(code, '，总维数 ' + total + '，所在分支 ' + ar.comps[nd.comp].name);
+    box.append(document.createElement('br'));
+    box.append('直接前驱：' + (preds.join('，') || '无') + '；直接后继：' + (succs.join('，') || '无'));
   }
 
   /** 画布上要标注的维数：Map(vertex id → BigInt | null) */
@@ -1030,6 +1246,21 @@
     render();
   }));
   $('pa-L').addEventListener('input', () => { if (parseInt($('pa-L').value, 10) >= 1) render(); });
+  $('btn-ar').addEventListener('click', openAR);
+  ['ar-label', 'ar-tau'].forEach((id) => $(id).addEventListener('change', drawAR));
+  $('ar-layers').addEventListener('input', () => {
+    if (parseInt($('ar-layers').value, 10) >= 1) { arSel = null; arScale = null; drawAR(); renderARSummary(); }
+  });
+  $('ar-zoom-in').addEventListener('click', () => { arScale = Math.min(4, (arScale || 1) * 1.25); drawAR(); });
+  $('ar-zoom-out').addEventListener('click', () => { arScale = Math.max(0.15, (arScale || 1) / 1.25); drawAR(); });
+  $('ar-zoom-fit').addEventListener('click', () => { arScale = null; drawAR(); });
+  $('ar-nodes').addEventListener('click', (e) => {
+    const g = e.target.closest('[data-ar]');
+    if (!g) return;
+    const id = +g.dataset.ar;
+    arSel = arSel === id ? null : id;
+    drawAR();
+  });
   $('pa-table').addEventListener('click', (e) => {
     const tr = e.target.closest('tbody tr');
     if (!tr) return;
@@ -1240,6 +1471,7 @@
     runSequence: runSequence,
     importText: importText,
     computePA: computePA,
+    computeAR: computeAR,
     exportTikZ: exportTikZ
   };
 })();
