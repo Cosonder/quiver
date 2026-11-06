@@ -22,6 +22,11 @@ No build step and no dependencies: use the online version above, or open `index.
 - **AR quivers of the derived and cluster categories**: switch the category in the AR quiver window.
   - D^b(mod kQ): following Happel's theorem, ℤQ is knitted with signed classes in K₀ (τ⁻¹I(j) = P(j)[1]). For Dynkin types a range of shifts [a, b] can be chosen; for other types, the component containing the projectives (preinjectives[−1] ∪ preprojectives) is drawn, together with the tubes in degree [0].
   - Cluster category C_Q = D^b/τ⁻¹[1]: for Dynkin types, all indecomposable objects (indecomposable modules and the P(i)[1]; positive roots + n of them, in bijection with the cluster variables), with the wrap-around τ⁻¹(P(i)[1]) = P(i) marked; for other types, the transjective component … → I → P[1] → P → … together with the tubes.
+- **Proof panel**: a panel in the bottom-right corner explains every step that changes the picture.
+  - Each edit is explained in terms of the matrix B (e.g. drawing an arrow sets b[i,j] and b[j,i] by skew-symmetry).
+  - Each mutation μₖ is derived through the three steps (compose, reverse, cancel), then checked entry by entry against the matrix formula.
+  - Highlighting a module's dimension vector shows the count of paths by length.
+  - The AR quiver window has its own Proof panel: the classification, the projectives and injectives, every mesh computation (τ⁻¹X = Σ middle terms − X), where each τ-orbit stops or the shift changes, the derivation of the tubes, and the identifications in the cluster category.
 - **Examples**: A₃, A₄, D₄, E₆, D̃₄, Ã₂, an oriented 3-cycle, the Kronecker and Markov quivers, A₂/A₃ with principal coefficients, and the ice quivers of Gr(2,5) and Gr(2,6).
 - **Import / export**: JSON, skew-symmetric matrix text, and TikZ code.
 
