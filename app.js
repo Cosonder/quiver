@@ -27,6 +27,8 @@
   let arrowDrag = null;     // 拖动画箭头
   let demo = null;          // 分步演示 { stages, step, k }
   let playTimer = null;
+  let modHL = null;         // 画布上显示维数向量的模 { kind: 'P'|'I'|'S', id }
+  let paCache = { key: null, value: null };
 
   const MODE_HINTS = {
     move: '拖动顶点调整位置；双击顶点在该处变异；双击空白处添加顶点。',
@@ -470,6 +472,155 @@
     render();
   }
 
+
+  // ---------------------------------------------------------------- 路代数
+  const SUP = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+  const sup = (x) => String(x).split('').map((d) => SUP[+d]).join('');
+  const fmt = (x) => (x === null ? '∞' : x.toString());
+
+  function paOptions() {
+    const trunc = $('pa-rel').value === 'trunc';
+    let L = parseInt($('pa-L').value, 10);
+    if (!(L >= 1)) L = 2;
+    return { trunc: trunc, L: Math.min(L, 30), mutableOnly: $('pa-mutable').checked };
+  }
+
+  /** 当前箭图的路代数（带缓存）。verts 为参与计算的顶点下标（显示顺序：先可变后冰冻）*/
+  function computePA() {
+    const o = paOptions();
+    const V = state.vertices;
+    const key = JSON.stringify([state.B, V.map((v) => v.frozen), o]);
+    if (paCache.key === key) return paCache.value;
+    const mut = [], frz = [];
+    V.forEach((v, i) => (v.frozen ? frz : mut).push(i));
+    const verts = o.mutableOnly ? mut : mut.concat(frz);
+    const A = verts.map((i) => verts.map((j) => Math.max(state.B[i][j], 0)));
+    const pa = Q.pathAlgebra(A, o.trunc ? { truncate: o.L } : {});
+    const value = { pa: pa, verts: verts, opts: o };
+    paCache = { key: key, value: value };
+    return value;
+  }
+
+  /** 模的维数向量，按 verts 的顺序 */
+  function moduleDims(info, kind, a) {
+    if (kind === 'P') return Q.projectiveDim(info.pa, a);
+    if (kind === 'I') return Q.injectiveDim(info.pa, a);
+    return info.verts.map((_, j) => (j === a ? 1n : 0n));
+  }
+
+  function modName(kind, label) {
+    return kind + '(' + label + ')';
+  }
+
+  function layerText(vec, info) {
+    const parts = [];
+    vec.forEach((m, j) => {
+      if (m > 0n) parts.push(state.vertices[info.verts[j]].label + (m > 1n ? sup(m) : ''));
+    });
+    return parts.length ? parts.join(' ⊕ ') : '0';
+  }
+
+  function renderPathAlgebra() {
+    const V = state.vertices;
+    const info = computePA();
+    const pa = info.pa, o = info.opts;
+    $('pa-L').hidden = $('pa-L-label').hidden = !o.trunc;
+    const algName = o.trunc ? 'kQ / R' + sup(o.L) : 'kQ';
+    const nArrows = pa.powers.length > 1 ? Q.totalDim(pa.powers[1].flat()) : 0n;
+
+    // 概要
+    let html = '';
+    if (!info.verts.length) {
+      html = '<span class="hint">没有顶点。</span>';
+    } else {
+      html += '<div>dim ' + algName + ' = <span class="big">' + fmt(pa.dim) + '</span></div>';
+      if (!pa.acyclic) {
+        const cyc = pa.onCycle.map((a) => V[info.verts[a]].label).join(', ');
+        html += '<div class="' + (o.trunc ? 'hint' : 'warn') + '">Q 含有向圈（经过顶点 ' + cyc + '）' +
+          (o.trunc ? '。' : '，kQ 是无穷维的；可选择「截断」。') + '</div>';
+      }
+      html += '<dl>' +
+        '<dt>顶点 / 箭头</dt><dd>' + info.verts.length + ' / ' + nArrows + '</dd>' +
+        '<dt>有向圈</dt><dd>' + (pa.acyclic ? '无（Q 无圈）' : '有') + '</dd>' +
+        '<dt>Loewy 长度</dt><dd>' + (pa.loewy != null ? pa.loewy : '∞') + '</dd>' +
+        (pa.finite && pa.loewy ? '<dt>最长非零路</dt><dd>' + (pa.loewy - 1) + '</dd>' : '') +
+        '</dl>';
+    }
+    $('pa-summary').innerHTML = html;
+
+    // 维数向量表
+    const kind = $('pa-kind').value;
+    const esc = (t) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    if (modHL && (idx(modHL.id) < 0 || info.verts.indexOf(idx(modHL.id)) < 0)) modHL = null;
+    let t = '';
+    if (info.verts.length) {
+      t += '<thead><tr><th>模</th>' + info.verts.map((i) => '<th class="' + (V[i].frozen ? 'frozen' : '') + '">' + esc(V[i].label) + '</th>').join('') + '<th>dim</th></tr></thead><tbody>';
+      const totals = info.verts.map(() => 0n);
+      let totalsInf = info.verts.map(() => false);
+      info.verts.forEach((i, a) => {
+        const d = moduleDims(info, kind, a);
+        const active = modHL && modHL.kind === kind && modHL.id === V[i].id;
+        t += '<tr data-id="' + V[i].id + '" class="' + (active ? 'active' : '') + '"><th>' + esc(modName(kind, V[i].label)) + '</th>';
+        d.forEach((x, j) => {
+          if (x === null) totalsInf[j] = true; else totals[j] += x;
+          t += '<td class="' + (x === null ? 'inf' : x === 0n ? 'zero' : '') + '">' + fmt(x) + '</td>';
+        });
+        t += '<td class="tot' + (Q.totalDim(d) === null ? ' inf' : '') + '">' + fmt(Q.totalDim(d)) + '</td></tr>';
+      });
+      t += '</tbody>';
+      if (kind !== 'S') {
+        const all = totals.map((x, j) => (totalsInf[j] ? null : x));
+        t += '<tfoot><tr><td>Σ</td>' + all.map((x) => '<td>' + fmt(x) + '</td>').join('') + '<td class="tot">' + fmt(pa.dim) + '</td></tr></tfoot>';
+      }
+    }
+    $('pa-table').innerHTML = t;
+
+    // 根层 / 基座层
+    const box = $('pa-layers');
+    box.innerHTML = '';
+    if (modHL && modHL.kind !== 'S') {
+      const a = info.verts.indexOf(idx(modHL.id));
+      const label = byId(modHL.id).label;
+      const ls = Q.layers(pa, a, modHL.kind);
+      const isP = modHL.kind === 'P';
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = modName(modHL.kind, label) + (isP ? ' 的根层（自顶向下）' : ' 的基座层（自下向上）');
+      box.appendChild(title);
+      const lw = document.createElement('div');
+      lw.className = 'loewy';
+      const rows = ls.map((vec, l) => ({ name: (isP ? (l === 0 ? '顶' : 'rad' + sup(l)) : (l === 0 ? '基座' : 'soc' + sup(l + 1))), text: layerText(vec, info) }));
+      if (!pa.finite) rows.push({ name: '…', text: '（无穷多层）' });
+      (isP ? rows : rows.slice().reverse()).forEach((r) => {
+        const row = document.createElement('div');
+        row.className = 'layer';
+        const n = document.createElement('span'); n.className = 'lname'; n.textContent = r.name;
+        const v = document.createElement('span'); v.className = 'lval'; v.textContent = r.text;
+        row.append(n, v);
+        lw.appendChild(row);
+      });
+      box.appendChild(lw);
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = isP
+        ? '第 l 层 = 从 ' + label + ' 出发、长度为 l 的路的终点。'
+        : '自下第 l 层 = 长度为 l、终点为 ' + label + ' 的路的起点。';
+      box.appendChild(hint);
+    }
+  }
+
+  /** 画布上要标注的维数：Map(vertex id → BigInt | null) */
+  function highlightDims() {
+    if (!modHL || demo) return null;
+    const info = computePA();
+    const a = info.verts.indexOf(idx(modHL.id));
+    if (a < 0) return null;
+    const d = moduleDims(info, modHL.kind, a);
+    const m = new Map();
+    info.verts.forEach((i, j) => m.set(state.vertices[i].id, d[j]));
+    return m;
+  }
+
   // ---------------------------------------------------------------- 绘制
   function trimDist(v, ux, uy) {
     return v.frozen ? H / Math.max(Math.abs(ux), Math.abs(uy)) : R;
@@ -526,8 +677,12 @@
 
   function drawVertices() {
     layerV.textContent = '';
+    const dims = highlightDims();
     state.vertices.forEach((v) => {
       let cls = 'vertex' + (v.frozen ? ' frozen' : '');
+      const dv = dims ? dims.get(v.id) : undefined;
+      if (dims && (dv === undefined || dv === 0n)) cls += ' dim0';
+      if (dims && v.id === modHL.id) cls += ' dimtarget';
       if (v.id === selected) cls += ' selected';
       if (v.id === pendingSource || (arrowDrag && arrowDrag.from === v.id)) cls += ' source';
       if (demo && v.id === demo.k) cls += ' mutating';
@@ -538,6 +693,10 @@
       const t = el('text', {}, g);
       t.textContent = v.label;
       if (v.label.length > 2) t.setAttribute('font-size', v.label.length > 3 ? '9' : '11');
+      if (dims && dv !== undefined && dv !== 0n) {
+        const b = el('text', { x: R - 2, y: -R - 2, class: 'dimbadge' + (dv === null ? ' inf' : '') }, g);
+        b.textContent = fmt(dv);
+      }
     });
   }
 
@@ -653,6 +812,7 @@
     renderCanvas();
     renderMatrix();
     renderStats();
+    renderPathAlgebra();
     renderSeq();
     renderSelection();
     renderStageBar();
@@ -863,6 +1023,21 @@
   $('btn-clear').addEventListener('click', clearAll);
 
   $('opt-full').addEventListener('change', renderMatrix);
+
+  // 路代数面板
+  ['pa-rel', 'pa-mutable', 'pa-kind'].forEach((id) => $(id).addEventListener('change', () => {
+    if (id === 'pa-kind' && modHL) modHL = { kind: $('pa-kind').value, id: modHL.id };
+    render();
+  }));
+  $('pa-L').addEventListener('input', () => { if (parseInt($('pa-L').value, 10) >= 1) render(); });
+  $('pa-table').addEventListener('click', (e) => {
+    const tr = e.target.closest('tbody tr');
+    if (!tr) return;
+    const id = +tr.dataset.id;
+    const kind = $('pa-kind').value;
+    modHL = modHL && modHL.id === id && modHL.kind === kind ? null : { kind: kind, id: id };
+    render();
+  });
   $('matrix').addEventListener('change', (e) => {
     const t = e.target;
     if (!t.dataset || t.dataset.r == null) return;
@@ -915,6 +1090,7 @@
     if (modes[key]) { setMode(modes[key]); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selected != null) { e.preventDefault(); deleteVertex(selected); return; }
     if (e.key === 'Escape') {
+      modHL = null;
       pendingSource = null;
       selected = null;
       stopDemo();
@@ -1063,6 +1239,7 @@
     mutateAt: mutateAt,
     runSequence: runSequence,
     importText: importText,
+    computePA: computePA,
     exportTikZ: exportTikZ
   };
 })();

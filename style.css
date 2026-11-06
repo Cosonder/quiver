@@ -126,7 +126,7 @@ kbd {
 .panel.right { border-left: 1px solid var(--border); }
 .panel section { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .panel section:last-child { border-bottom: none; }
-.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+.panel h2 { font-size: 13px; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
 .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .row > input[type="text"] { flex: 1; }
 .row.wrap { flex-wrap: wrap; }
@@ -279,6 +279,47 @@ select { width: 100%; }
 .stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
 .stats dt { color: var(--muted); }
 .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* path algebra */
+#pa-rel { flex: 1; width: auto; }
+#pa-kind { width: 100%; }
+#pa-L { width: 56px; }
+.pa-summary { margin-top: 8px; font-size: 13px; }
+.pa-summary .big { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pa-summary .warn { color: var(--orange); }
+.pa-summary dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; margin: 4px 0 0; }
+.pa-summary dt { color: var(--muted); }
+.pa-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+.dimtable { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+.dimtable th { font-weight: 600; color: var(--muted); padding: 2px 6px; font-size: 12px; text-align: center; white-space: nowrap; }
+.dimtable th.frozen { color: var(--frozen-stroke); }
+.dimtable td { padding: 3px 6px; text-align: center; }
+.dimtable td.zero { color: var(--muted); opacity: .5; }
+.dimtable td.inf { color: var(--orange); font-weight: 600; }
+.dimtable td.tot { font-weight: 600; border-left: 1px solid var(--border); }
+.dimtable tbody tr { cursor: pointer; }
+.dimtable tbody tr:hover { background: var(--grid); }
+.dimtable tbody tr.active { background: var(--accent-soft); }
+.dimtable tbody tr.active th { color: var(--accent); }
+.dimtable tfoot td { border-top: 1px solid var(--border); font-weight: 600; }
+.pa-layers { margin-top: 8px; font-size: 13px; }
+.pa-layers:empty { display: none; }
+.pa-layers .title { font-weight: 600; margin-bottom: 4px; }
+.loewy { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.loewy .layer { display: grid; grid-template-columns: 58px 1fr; gap: 6px; }
+.loewy .lname { color: var(--muted); font-size: 12px; }
+.loewy .lval { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }
+.pa-conv { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.pa-conv summary { cursor: pointer; }
+.pa-conv p { margin: 4px 0 0; }
+.dimbadge {
+  font-size: 13px; font-weight: 700; fill: var(--green);
+  paint-order: stroke; stroke: var(--canvas); stroke-width: 4px; stroke-linejoin: round;
+  pointer-events: none;
+}
+.dimbadge.inf { fill: var(--orange); }
+.vertex.dim0 { opacity: .35; }
+.vertex.dimtarget .shape { stroke: var(--green); stroke-width: 3.5; }
 
 /* dialogs */
 dialog {
