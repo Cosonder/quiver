@@ -56,8 +56,8 @@
       <section>
         <h2>Ice quiver</h2>
         <div class="row wrap">
-          <button id="btn-principal" title="For each mutable vertex i, add a frozen vertex i′ and an arrow i → i′">Principal coefficients</button>
-          <button id="btn-coprincipal" title="For each mutable vertex i, add a frozen vertex i′ and an arrow i′ → i">Coprincipal coefficients</button>
+          <button id="btn-principal" title="For each mutable vertex i, add a frozen vertex i′ and an arrow i′ → i">Principal coefficients</button>
+          <button id="btn-coprincipal" title="For each mutable vertex i, add a frozen vertex i′ and an arrow i → i′">Coprincipal coefficients</button>
           <button id="btn-unfreeze">Unfreeze all</button>
           <button id="btn-remove-frozen">Remove frozen vertices</button>
         </div>
@@ -317,7 +317,7 @@
       <p>Matrix form: b′<sub>ij</sub> = −b<sub>ij</sub> if i = k or j = k, and otherwise b′<sub>ij</sub> = b<sub>ij</sub> + (|b<sub>ik</sub>|b<sub>kj</sub> + b<sub>ik</sub>|b<sub>kj</sub>|)/2.</p>
       <h3>Ice quivers</h3>
       <p>In an ice quiver some vertices are <b>frozen</b> (squares): you cannot mutate at a frozen vertex, and arrows between frozen vertices are ignored (and removed after mutation). The exchange matrix B̃ keeps only the columns of mutable vertices (its rows are all vertices).
-        “Principal coefficients” adds a frozen vertex i′ and an arrow i → i′ for each mutable vertex i; the columns of the frozen block then give the c-vectors.</p>
+        “Principal coefficients” adds a frozen vertex i′ and an arrow i′ → i for each mutable vertex i; the columns of the frozen block then give the c-vectors.</p>
       <h3>Keyboard shortcuts</h3>
       <p><kbd>S</kbd> select · <kbd>V</kbd> vertex · <kbd>I</kbd> frozen vertex · <kbd>A</kbd> arrow · <kbd>F</kbd> freeze · <kbd>D</kbd> delete · <kbd>M</kbd> mutate · <kbd>Delete</kbd> delete selection · <kbd>Ctrl+Z / Ctrl+Y</kbd> undo/redo · <kbd>←</kbd>/<kbd>→</kbd> change step in step-by-step mode</p>
       <div class="row end"><button value="close" class="primary">Got it</button></div>
@@ -329,6 +329,6 @@
   <script src="vendor/katex/katex.min.js?v=0.16.11"></script>
   <script src="quiver-core.js?v=9"></script>
   <script src="ar-core.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

@@ -9,7 +9,7 @@ No build step and no dependencies: use the online version above, or open `index.
 ## Features
 
 - **Drawing quivers**: double-click an empty spot to add a vertex; with the **Arrow** tool, drag from the source to the target (or click the source, then the target) to draw an arrow. Multiple arrows are allowed; an arrow in the opposite direction cancels one (quivers have no 1-cycles or 2-cycles).
-- **Ice quivers**: vertices can be frozen (drawn as squares). Frozen vertices cannot be mutated, and arrows between frozen vertices are ignored. One click adds **principal coefficients** (i → i′) or **coprincipal coefficients** (i′ → i).
+- **Ice quivers**: vertices can be frozen (drawn as squares). Frozen vertices cannot be mutated, and arrows between frozen vertices are ignored. One click adds **principal coefficients** (i′ → i) or **coprincipal coefficients** (i → i′).
 - **Mutation μₖ**: click a vertex to mutate; run a mutation sequence (e.g. `1 2 1`), mutate at random, go back to the initial seed, undo/redo.
 - **Step-by-step mode**: shows a mutation in three animated steps: compose paths i → k → j, reverse the arrows incident to k, remove 2-cycles (and arrows between frozen vertices).
 - **Exchange matrix**: the extended exchange matrix B̃ (or the full skew-symmetric matrix) is shown live and can be edited directly.

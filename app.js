@@ -550,10 +550,10 @@
       state.B[j][i] = -sign;
     });
     render();
-    toast(sign > 0 ? 'Added principal coefficients: i → i′.' : 'Added coprincipal coefficients: i′ → i.');
-    proof(sign > 0 ? 'Add principal coefficients' : 'Add coprincipal coefficients', [
+    toast(sign < 0 ? 'Added principal coefficients: i′ → i.' : 'Added coprincipal coefficients: i → i′.');
+    proof(sign < 0 ? 'Add principal coefficients' : 'Add coprincipal coefficients', [
       'For each of the $' + mutable.length + '$ mutable vertices $i$, add a frozen vertex $i\'$ and an arrow $' + (sign > 0 ? "i\\to i'" : "i'\\to i") + '$.',
-      'Thus the coefficient block of $\\tilde B$ (rows $i\'$, columns $i$) is $' + (sign > 0 ? '-I' : 'I') + '$' + (sign > 0 ? '; after mutations its columns are, up to sign, the $c$-vectors.' : '.')
+      'Thus the coefficient block of $\\tilde B$ (rows $i\'$, columns $i$) is $' + (sign > 0 ? '-I' : 'I') + '$' + (sign < 0 ? '; after mutations its columns are the $c$-vectors.' : '.')
     ]);
   }
 
@@ -681,11 +681,11 @@
     markov: { verts: [['1', -1.9, 1.1], ['2', 0, -2.1], ['3', 1.9, 1.1]], arrows: [['1', '2', 2], ['2', '3', 2], ['3', '1', 2]] },
     A2prin: {
       verts: [['1', -1.4, 0.9], ['2', 1.4, 0.9], ['1′', -1.4, -1.3, true], ['2′', 1.4, -1.3, true]],
-      arrows: [['1', '2', 1], ['1', '1′', 1], ['2', '2′', 1]]
+      arrows: [['1', '2', 1], ['1′', '1', 1], ['2′', '2', 1]]
     },
     A3prin: {
       verts: [['1', -2.2, 0.5], ['2', 0, 1.5], ['3', 2.2, 0.5], ['1′', -2.2, -1.5, true], ['2′', 0, -0.6, true], ['3′', 2.2, -1.5, true]],
-      arrows: [['1', '2', 1], ['2', '3', 1], ['1', '1′', 1], ['2', '2′', 1], ['3', '3′', 1]]
+      arrows: [['1', '2', 1], ['2', '3', 1], ['1′', '1', 1], ['2′', '2', 1], ['3′', '3', 1]]
     },
     gr25: polygonFan(5),
     gr26: polygonFan(6),
@@ -2097,8 +2097,8 @@
     try { localStorage.setItem(STORAGE_KEY + '-steps', $('opt-steps').checked ? '1' : '0'); } catch (e) { /* ignore */ }
   });
 
-  $('btn-principal').addEventListener('click', () => addCoefficients(1));
-  $('btn-coprincipal').addEventListener('click', () => addCoefficients(-1));
+  $('btn-principal').addEventListener('click', () => addCoefficients(-1));
+  $('btn-coprincipal').addEventListener('click', () => addCoefficients(1));
   $('btn-unfreeze').addEventListener('click', unfreezeAll);
   $('btn-remove-frozen').addEventListener('click', removeFrozen);
 
