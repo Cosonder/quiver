@@ -793,7 +793,109 @@
     };
   }
 
+  /**
+   * Exact Hom / Ext¹ dimensions for indecomposable modules over a Dynkin
+   * path algebra kQ, with k algebraically closed. This is NOT a computation
+   * for a quotient kQ/I, a derived category, or a cluster category.
+   *
+   * Fix X and write h(Y) = dim Hom(X,Y). Applying Hom(X,-) to the almost
+   * split sequence ending at a nonprojective Y gives
+   *   h(Y) = Σ_{Z→Y} m(Z,Y) h(Z) − h(τY) + δ(X,Y).
+   * The last term is the dimension of the simple functor at Y. For a
+   * projective Y, rad Y → Y is right almost split and the same recurrence
+   * holds without the τY term. Dynkin AR quivers are directed, so this
+   * determines h in topological order (including the projective boundary).
+   * Finally Ext¹(X,Y) = h(Y) − <dim X, dim Y> by heredity.
+   *
+   * All matrices are indexed [source node id][target node id] in `ar`.
+   * `compatible[X][Y]` means Ext¹ vanishes in BOTH directions. Recurrence
+   * data is returned for reproducible, numeric explanations in the UI:
+   * predecessors[Y] = [{ from, mult }], tauOf[Y] = node id or null.
+   * Unsupported input fails explicitly; it is never approximated by a
+   * finite window of an infinite AR component.
+   */
+  function dynkinHomExt(A) {
+    if (!Array.isArray(A)) return { ok: false, reason: 'invalid-matrix' };
+    const n = A.length;
+    if (!n) return { ok: false, reason: 'empty' };
+    for (let i = 0; i < n; i++) {
+      if (!Array.isArray(A[i]) || A[i].length !== n) return { ok: false, reason: 'invalid-matrix' };
+      for (let j = 0; j < n; j++) {
+        if (!Number.isSafeInteger(A[i][j]) || A[i][j] < 0) return { ok: false, reason: 'invalid-matrix' };
+      }
+    }
+    // Bound the quadratic tables before knitting or allocating them.
+    const maxObjects = 512;
+    if (n > maxObjects) return { ok: false, reason: 'too-large', maxObjects: maxObjects };
+    if (!topoOrder(A)) return { ok: false, reason: 'cyclic' };
+    const comps = components(A).map((verts) => classify(A, verts));
+    if (comps.some((c) => c.kind !== 'dynkin')) return { ok: false, reason: 'non-dynkin' };
+    const count = comps.reduce((s, c) => s + c.count, 0);
+    if (count > maxObjects) return { ok: false, reason: 'too-large', maxObjects: maxObjects, count: count };
+
+    const ar = arQuiver(A, { tubes: false });
+    if (!ar.ok || ar.nodes.length !== count) return { ok: false, reason: 'inconsistent-ar' };
+    const size = ar.nodes.length;
+    const predecessors = Array.from({ length: size }, () => []);
+    const successors = Array.from({ length: size }, () => []);
+    const indeg = new Array(size).fill(0);
+    const tauOf = new Array(size).fill(null);
+    ar.edges.forEach((edge) => {
+      predecessors[edge.to].push({ from: edge.from, mult: edge.mult });
+      successors[edge.from].push(edge.to);
+      indeg[edge.to]++;
+    });
+    ar.tau.forEach((edge) => { tauOf[edge.from] = edge.to; });
+    const order = [];
+    for (let y = 0; y < size; y++) if (indeg[y] === 0) order.push(y);
+    for (let pos = 0; pos < order.length; pos++) {
+      successors[order[pos]].forEach((y) => { if (--indeg[y] === 0) order.push(y); });
+    }
+    if (order.length !== size) return { ok: false, reason: 'inconsistent-ar' };
+    const position = new Array(size);
+    order.forEach((y, p) => { position[y] = p; });
+    if (ar.nodes.some((y) => (y.proj >= 0) !== (tauOf[y.id] === null) ||
+      (tauOf[y.id] !== null && position[tauOf[y.id]] >= position[y.id]))) {
+      return { ok: false, reason: 'inconsistent-ar' };
+    }
+
+    const matrix = () => Array.from({ length: size }, () => new Array(size).fill(0));
+    const hom = matrix(), ext = matrix(), euler = matrix();
+    // Precompute E dim Y for E = I − A; keep source supports sparse so
+    // disconnected Dynkin components do not make Euler evaluation costly.
+    const eulerTargets = ar.nodes.map((y) => y.dim.map((value, i) => {
+      for (let j = 0; j < n; j++) if (A[i][j]) value -= A[i][j] * y.dim[j];
+      return value;
+    }));
+    for (let x = 0; x < size; x++) {
+      const support = [];
+      ar.nodes[x].dim.forEach((value, i) => { if (value) support.push([i, value]); });
+      for (const y of order) {
+        let h = x === y ? 1 : 0;
+        for (const p of predecessors[y]) h += p.mult * hom[x][p.from];
+        if (tauOf[y] !== null) h -= hom[x][tauOf[y]];
+        let pairing = 0;
+        for (const [i, value] of support) pairing += value * eulerTargets[y][i];
+        const e = h - pairing;
+        // A failure here indicates an incomplete/invalid AR calculation,
+        // not a negative dimension to be clamped to zero.
+        if (!Number.isSafeInteger(h) || h < 0 || !Number.isSafeInteger(e) || e < 0) {
+          return { ok: false, reason: 'inconsistent-ar' };
+        }
+        hom[x][y] = h;
+        euler[x][y] = pairing;
+        ext[x][y] = e;
+      }
+    }
+    const compatible = ext.map((row, x) => row.map((e, y) => e === 0 && ext[y][x] === 0));
+    return {
+      ok: true, ar: ar, hom: hom, ext: ext, euler: euler,
+      compatible: compatible, order: order, predecessors: predecessors, tauOf: tauOf
+    };
+  }
+
   const api = {
+    dynkinHomExt: dynkinHomExt,
     components: components,
     topoOrder: topoOrder,
     findCycle: findCycle,

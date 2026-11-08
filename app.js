@@ -904,6 +904,138 @@
   let arSel = null;     // 选中的 AR 顶点 id
   let arCache = { key: null, value: null };
 
+  function htmlElement(tag, attrs, parent) {
+    const element = document.createElement(tag);
+    Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
+    parent.appendChild(element);
+    return element;
+  }
+
+  // Dynkin module-category Hom/Ext. Selection IDs refer to the current AR graph.
+  let arTarget = null;
+  let homCache = { key: null, value: null };
+  let homSelectionKey = null;
+  let arHom = null;
+
+  function prepareHomInspector(value) {
+    const info = computePA();
+    const cat = $('ar-cat').value;
+    const A = info.verts.map((i) => info.verts.map((j) => Math.max(state.B[i][j], 0)));
+    const key = JSON.stringify([A, info.verts]);
+    const selectionKey = JSON.stringify([key, cat, info.opts.trunc]);
+    if (selectionKey !== homSelectionKey) {
+      arSel = arTarget = null;
+      homSelectionKey = selectionKey;
+    }
+    let status = '';
+    arHom = null;
+    if (!value.ar.ok) status = 'Requires a nonempty acyclic Dynkin quiver.';
+    else if (cat !== 'mod') status = 'Available in mod kQ for Dynkin types. Switch category to use this inspector.';
+    else if (info.opts.trunc) status = 'Available for kQ without relations. Choose “No relations: kQ” in the Path algebra panel.';
+    else if (!value.ar.finite) status = 'Available when every component is Dynkin (A, D or E).';
+    else {
+      if (homCache.key !== key) homCache = { key: key, value: AR.dynkinHomExt(A) };
+      if (homCache.value.ok) arHom = homCache.value;
+      else status = homCache.value.reason === 'too-large'
+        ? 'Hom/Ext is limited to 512 indecomposable modules.'
+        : 'Hom/Ext computation could not be verified for this quiver.';
+    }
+    $('ar-hom-controls').hidden = !arHom;
+    $('ar-hom-status').textContent = status || 'Dynkin mod kQ · click X, Shift-click Y (or use the selectors).';
+    if (!arHom) {
+      arTarget = null;
+      $('ar-hom-result').textContent = '';
+      $('ar-hom-x').textContent = $('ar-hom-y').textContent = '';
+      return;
+    }
+    if (!arHom.ar.nodes[arSel]) arSel = null;
+    if (!arHom.ar.nodes[arTarget]) arTarget = null;
+    ['ar-hom-x', 'ar-hom-y'].forEach((id) => {
+      const select = $(id);
+      select.textContent = '';
+      htmlElement('option', { value: '' }, select).textContent = id === 'ar-hom-x' ? 'Choose X…' : 'Choose Y…';
+      arHom.ar.nodes.forEach((nd) => {
+        htmlElement('option', { value: nd.id }, select).textContent = arNodeName(nd, info) + ' · (' + nd.dim.join(',') + ')';
+      });
+      select.value = (id === 'ar-hom-x' ? arSel : arTarget) ?? '';
+    });
+  }
+
+  function homMatches(y) {
+    if (!arHom || arSel == null) return null;
+    switch ($('ar-hom-highlight').value) {
+      case 'compatible': return arHom.compatible[arSel][y];
+      case 'ext-out': return arHom.ext[arSel][y] === 0;
+      case 'ext-in': return arHom.ext[y][arSel] === 0;
+      case 'hom-out': return arHom.hom[arSel][y] > 0;
+      default: return null;
+    }
+  }
+
+  function renderHomResult() {
+    const box = $('ar-hom-result');
+    box.textContent = '';
+    if (!arHom) return;
+    if (arSel == null) {
+      box.textContent = 'Choose X to highlight modules, then Y to inspect both directions. Compatibility means both Ext¹ groups vanish.';
+      return;
+    }
+    const x = arSel, y = arTarget;
+    const name = (id) => arDrawn.items[id].name;
+    const matches = arHom.ar.nodes.filter((nd) => homMatches(nd.id) === true).length;
+    const summary = htmlElement('div', { class: 'ar-hom-summary' }, box);
+    summary.textContent = 'X = ' + name(x) + (y == null ? '' : '; Y = ' + name(y)) + '. ' +
+      ($('ar-hom-highlight').value === 'neighbors' ? 'Direct neighbours are highlighted.' : matches + ' matching modules (green fill); X has a solid blue outline, Y a dashed outline.');
+    if (y == null) return;
+    const table = htmlElement('table', { class: 'ar-hom-table' }, box);
+    const head = htmlElement('tr', {}, htmlElement('thead', {}, table));
+    ['Direction', 'dim Hom', 'dim Ext¹', 'Euler pairing'].forEach((s) => { htmlElement('th', { scope: 'col' }, head).textContent = s; });
+    const body = htmlElement('tbody', {}, table);
+    [[x, y, 'X → Y'], [y, x, 'Y → X']].forEach(([a, b, label]) => {
+      const row = htmlElement('tr', {}, body);
+      htmlElement('th', { scope: 'row' }, row).textContent = label;
+      [arHom.hom[a][b], arHom.ext[a][b], arHom.euler[a][b]].forEach((v) => { htmlElement('td', {}, row).textContent = v; });
+    });
+    htmlElement('div', { class: 'ar-hom-verdict' }, box).textContent = arHom.compatible[x][y]
+      ? 'Compatible: Ext¹(X,Y) = Ext¹(Y,X) = 0; X ⊕ Y is rigid.'
+      : 'Not compatible: at least one of Ext¹(X,Y), Ext¹(Y,X) is nonzero.';
+  }
+
+  function homProofEntries() {
+    if (!arHom || arSel == null) return [];
+    const h = arHom, x = arSel, y = arTarget;
+    const name = (id) => arDrawn.items[id].tex;
+    const lines = [
+      'Work in $\\operatorname{mod}kQ$ for a Dynkin quiver over an algebraically closed field. Write $h_U(V)=\\dim_k\\operatorname{Hom}(U,V)$.',
+      'For nonprojective $V$, the almost split sequence $0\\to\\tau V\\to\\bigoplus_{Z\\to V}Z^{m_{ZV}}\\to V\\to0$ gives $$h_U(V)=\\sum_{Z\\to V}m_{ZV}h_U(Z)-h_U(\\tau V)+\\delta_{UV}.$$ The image in $\\operatorname{Hom}(U,V)$ is its radical, and the quotient has dimension $\\delta_{UV}$.',
+      'For projective $V$, use the injection $\\operatorname{rad}V\\hookrightarrow V$ and omit the $\\tau V$ term. Starting with empty sums equal to zero, evaluate in a topological order of the AR arrows. This uses almost split sequences, not a count of paths.',
+      'Since $kQ$ is hereditary, $$\\dim\\operatorname{Ext}^1(U,V)=h_U(V)-\\langle u,v\\rangle,\\qquad \\langle u,v\\rangle=\\sum_i u_i v_i-\\sum_{i\\to j}u_i v_j.$$'
+    ];
+    const entries = [];
+    if (y != null) {
+      const pairLines = ['$X=' + name(x) + '$ and $Y=' + name(y) + '$.'];
+      const trace = (a, b) => {
+        const t = h.tauOf[b];
+        const preds = h.predecessors[b];
+        const terms = preds.map((p) => p.mult + '\\cdot ' + h.hom[a][p.from]);
+        pairLines.push('For $U=' + name(a) + '$, $V=' + name(b) + '$: ' + (t == null
+          ? '$V$ is projective, so the boundary term is $\\operatorname{rad}V$.'
+          : '$\\tau V=' + name(t) + '$.') +
+          ' The incoming terms are ' + (preds.length ? preds.map((p) => '$h_U(' + name(p.from) + ')=' + h.hom[a][p.from] + '$ (multiplicity ' + p.mult + ')').join(', ') : 'an empty sum') + '.',
+          '$$h_U(V)=' + (terms.join('+') || '0') + (t == null ? '' : '-' + h.hom[a][t]) + '+' + (a === b ? 1 : 0) + '=' + h.hom[a][b] + '.$$',
+          '$$\\langle ' + texVec(h.ar.nodes[a].dim) + ',' + texVec(h.ar.nodes[b].dim) + '\\rangle=' + h.euler[a][b] + ',\\qquad \\dim\\operatorname{Ext}^1(U,V)=' + h.hom[a][b] + '-(' + h.euler[a][b] + ')=' + h.ext[a][b] + '.$$');
+      };
+      trace(x, y);
+      if (x !== y) trace(y, x);
+      pairLines.push(h.compatible[x][y]
+        ? 'Both directed Ext groups vanish. Dynkin indecomposables have no self-extensions, so $\\operatorname{Ext}^1(X\\oplus Y,X\\oplus Y)=0$.'
+        : 'At least one directed Ext group is nonzero, so $X\\oplus Y$ is not rigid.');
+      entries.push({ title: '**Calculation.** Selected Hom / Ext pair', lines: pairLines, proof: true, qed: true });
+    }
+    entries.push({ title: '**Lemma.** Hom-hammock recurrence and compatibility', lines: lines, proof: true, qed: true });
+    return entries;
+  }
+
   function arLayers() {
     const L = parseInt($('ar-layers').value, 10);
     return Math.max(1, Math.min(12, L >= 1 ? L : 4));
@@ -1006,7 +1138,7 @@
   }
 
   function openAR() {
-    arSel = null;
+    arSel = arTarget = null;
     arScale = null;
     $('dlg-ar').showModal();
     drawAR();
@@ -1061,6 +1193,7 @@
   function drawAR() {
     const value = computeAR();
     const ar = value.ar, info = value.info;
+    prepareHomInspector(value);
     const eE = $('ar-edges'), eN = $('ar-nodes'), svgAR = $('ar-canvas');
     eE.textContent = '';
     eN.textContent = '';
@@ -1076,6 +1209,7 @@
       svgAR.setAttribute('height', 0);
       arFixes(value);
       arDrawn = null;
+      renderARProof();
       return;
     }
 
@@ -1284,9 +1418,14 @@
       if (it.odd) cls += ' odd';
       if (it.shiftp) cls += ' shiftp';
       if (it.id === arSel) cls += ' sel';
-      else if (nb.has(it.id)) cls += ' nb';
+      else if (nb.has(it.id) && homMatches(it.id) == null) cls += ' nb';
+      if (arHom && it.id === arTarget) cls += ' hom-target';
+      const match = homMatches(it.id);
+      if (match === true) cls += ' hom-match';
+      else if (match === false) cls += ' hom-other';
       const g = el('g', { class: cls, transform: 'translate(' + it.X + ',' + it.Y + ')', 'data-ar': it.id }, eN);
-      el('title', {}, g).textContent = it.name + '  dim = (' + it.dim.join(', ') + ')';
+      el('title', {}, g).textContent = it.name + '  dim = (' + it.dim.join(', ') + ')' +
+        (arHom && arSel != null ? '\nHom(X,Y) = ' + arHom.hom[arSel][it.id] + '; Ext¹(X,Y) = ' + arHom.ext[arSel][it.id] + '; Ext¹(Y,X) = ' + arHom.ext[it.id][arSel] : '');
       el('rect', { x: -widths[it.id] / 2, y: -HH, width: widths[it.id], height: 2 * HH, rx: 5 }, g);
       el('text', {}, g).textContent = text(it);
     });
@@ -1303,6 +1442,7 @@
 
     arDrawn = { items: items, links: links, value: value, src: src, cat: cat };
     renderARInfo();
+    renderHomResult();
     renderARProof();
   }
 
@@ -1499,7 +1639,7 @@
       entries = v.ar.reason === 'cyclic'
         ? [{ title: '**Remark.** No Auslander–Reiten quiver', lines: ['$Q$ has an oriented cycle, so $kQ$ is infinite-dimensional; the knitting algorithm needs an acyclic quiver.'], proof: false, qed: false }]
         : [];
-    } else entries = arProofEntries();
+    } else entries = homProofEntries().concat(arProofEntries());
     renderProofList(list, entries, 'Nothing to show.');
     list.scrollTop = 0;
   }
@@ -1512,7 +1652,7 @@
     if (arSel == null || !items[arSel]) {
       const nReg = items.filter((it) => it.kind === 'tube' && !it.ghost).length;
       const nMain = items.filter((it) => it.kind !== 'tube' && !it.ghost).length;
-      box.textContent = 'Click an object for details; its direct predecessors and successors are highlighted. Shown: ' + nMain + ' ' +
+      box.textContent = 'Click an object for details. Shown: ' + nMain + ' ' +
         (arDrawn.cat === 'mod' ? (ar.finite ? 'indecomposable modules' : 'preprojective / preinjective modules') : 'objects') +
         (nReg ? ', plus ' + nReg + ' modules in tubes' : '') + '.';
       return;
@@ -2009,11 +2149,16 @@
   $('ar-zoom-in').addEventListener('click', () => { arScale = Math.min(4, (arScale || 1) * 1.25); drawAR(); });
   $('ar-zoom-out').addEventListener('click', () => { arScale = Math.max(0.15, (arScale || 1) / 1.25); drawAR(); });
   $('ar-zoom-fit').addEventListener('click', () => { arScale = null; drawAR(); });
+  $('ar-hom-x').addEventListener('change', (e) => { arSel = e.target.value === '' ? null : +e.target.value; drawAR(); });
+  $('ar-hom-y').addEventListener('change', (e) => { arTarget = e.target.value === '' ? null : +e.target.value; drawAR(); });
+  $('ar-hom-highlight').addEventListener('change', drawAR);
+  $('ar-hom-clear').addEventListener('click', () => { arSel = arTarget = null; drawAR(); });
   $('ar-nodes').addEventListener('click', (e) => {
     const g = e.target.closest('[data-ar]');
     if (!g) return;
     const id = +g.dataset.ar;
-    arSel = arSel === id ? null : id;
+    if (arHom && e.shiftKey) arTarget = arTarget === id ? null : id;
+    else arSel = arSel === id ? null : id;
     drawAR();
   });
   $('pa-table').addEventListener('click', (e) => {

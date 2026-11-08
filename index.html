@@ -6,7 +6,7 @@
   <title>Quiver Mutation</title>
   <meta name="description" content="Draw quivers and ice quivers in the browser and explore quiver mutation, path algebras and Auslander–Reiten quivers.">
   <link rel="stylesheet" href="vendor/katex/katex.min.css?v=0.16.11">
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <header class="topbar">
@@ -247,6 +247,24 @@
         <button id="ar-zoom-fit">Fit</button>
         <button id="ar-zoom-in" aria-label="Zoom in">+</button>
       </div>
+      <section class="ar-hom" aria-label="Dynkin Hom and Ext inspector">
+        <div class="ar-hom-head"><b>Hom / Ext¹</b><span id="ar-hom-status" class="hint"></span></div>
+        <div id="ar-hom-controls" class="row wrap" hidden>
+          <label>X <select id="ar-hom-x" aria-label="Source module X"></select></label>
+          <label>Y <select id="ar-hom-y" aria-label="Target module Y"></select></label>
+          <label>Highlight
+            <select id="ar-hom-highlight">
+              <option value="compatible">Ext¹(X,Y) = Ext¹(Y,X) = 0</option>
+              <option value="ext-out">Ext¹(X,Y) = 0</option>
+              <option value="ext-in">Ext¹(Y,X) = 0</option>
+              <option value="hom-out">Hom(X,Y) ≠ 0</option>
+              <option value="neighbors">Direct neighbours only</option>
+            </select>
+          </label>
+          <button id="ar-hom-clear">Clear X / Y</button>
+        </div>
+        <div id="ar-hom-result" aria-live="polite"></div>
+      </section>
       <div class="ar-stage">
         <div class="ar-scroll" id="ar-scroll">
           <svg id="ar-canvas" role="img" aria-label="AR quiver">
@@ -310,7 +328,7 @@
 
   <script src="vendor/katex/katex.min.js?v=0.16.11"></script>
   <script src="quiver-core.js?v=9"></script>
-  <script src="ar-core.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <script src="ar-core.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
