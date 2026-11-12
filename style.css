@@ -280,6 +280,37 @@ select { width: 100%; }
 .stats dt { color: var(--muted); }
 .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
 
+/* frozen arrows and the Λ panel */
+.edge.frozen-arrow { stroke: var(--frozen-stroke); stroke-width: 2.1; }
+.edge.frozen-arrow.red { stroke: var(--red); }
+.ah.frozen { fill: var(--frozen-stroke); }
+.lg-farrow { stroke: var(--frozen-stroke); stroke-width: 2.2; }
+.lam-status { font-size: 13px; margin: 6px 0; }
+.lam-status.warn { color: var(--orange); }
+.lam-title { font-size: 12px; color: var(--muted); margin-top: 8px; }
+#lam-euler-wrap { margin-top: 6px; font-size: 13px; }
+#lam-euler-wrap summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+#lam-section .matrix-scroll { max-height: 300px; overflow: auto; }
+.lam-matrix thead th { position: sticky; top: 0; background: var(--panel); }
+.lam-matrix td { padding: 2px 5px; }
+.lam-matrix td.pos { color: var(--accent); }
+.lam-matrix td.neg { color: var(--orange); }
+.lam-matrix td.ff { background: var(--frozen-fill); }
+.lam-matrix tbody tr { cursor: default; }
+#lam-explain { margin-top: 8px; width: 100%; }
+.lam-gen .row label { min-width: 34px; color: var(--muted); }
+.lam-gen select { flex: 1; width: auto; min-width: 0; }
+.lam-gen input[type="number"] { width: 64px; }
+.lam-gen input[type="text"] { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.lam-bad { color: var(--orange); }
+.lam-kr:empty { display: none; }
+.lam-kr { margin-top: 10px; font-size: 13px; }
+.lam-kr-head { font-weight: 600; }
+.lam-kr .katex { font-size: 1em; }
+.lam-kr-scroll { max-height: 240px; overflow: auto; }
+.lam-kr-table td.kr { text-align: left; }
+.lam-kr-table tbody tr { cursor: default; }
+
 /* path algebra */
 #pa-rel { flex: 1; width: auto; }
 #pa-kind { width: 100%; }
