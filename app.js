@@ -52,6 +52,32 @@
   const frozenArr = () => state.vertices.map((v) => !!v.frozen);
   const nextId = () => state.vertices.reduce((m, v) => Math.max(m, v.id), 0) + 1;
 
+  // ---- arrows between frozen vertices (Canesin–Cao–Janssens / Pressland)
+  // state.FF holds the Euler-matrix entries b̂_ij between two frozen vertices (0 elsewhere).
+  // It stays zero unless state.keepFF is on.
+  const LC = window.LambdaCore;
+  function ensureFF() {
+    const n = state.vertices.length;
+    const ok = Array.isArray(state.FF) && state.FF.length === n &&
+      state.FF.every((r) => Array.isArray(r) && r.length === n && r.every((x) => Number.isInteger(x)));
+    if (!ok) state.FF = Q.zeros(n);
+    if (!state.keepFF && state.FF.some((r) => r.some((x) => x !== 0))) state.keepFF = true;
+    return state.FF;
+  }
+  const ffPair = (i, j) => LC.decodePair(state.FF[i][j], state.FF[j][i]);
+  const setFFPair = (i, j, d) => { const e = LC.encodePair(d); state.FF[i][j] = e[0] || 0; state.FF[j][i] = e[1] || 0; };
+  /** number of arrows i → j, frozen ones included */
+  function arrowCount(i, j) {
+    const V = state.vertices;
+    if (V[i].frozen && V[j].frozen) {
+      if (i === j || !state.FF || !state.FF[i]) return 0;
+      const d = i < j ? ffPair(i, j) : ffPair(j, i);
+      return i < j ? d.uij + d.fij : d.uji + d.fji;
+    }
+    return state.B[i][j] > 0 ? state.B[i][j] : 0;
+  }
+  const arrowsNow = () => LC.arrowsOf(state.B, ensureFF(), frozenArr());
+
   function nextLabel() {
     const used = new Set(state.vertices.map((v) => v.label));
     let n = 1;
@@ -211,7 +237,8 @@
   }
 
   /** μ_k 的证明：先按三步组合描述，再用矩阵公式逐项核对 */
-  function mutationProof(Bold, Bnew, k, fr, stages) {
+  function mutationProof(Bold, Bnew, k, fr, stages, opts) {
+    const keep = !!(opts && opts.keep);
     const n = Bold.length;
     const K = T(k);
     const pos = (x) => Math.max(x, 0);
@@ -229,11 +256,16 @@
       if (Bold[k][j] > 0) inc.push(arrowText(k, j, Bold[k][j]));
     }
     const st = stages[3];
-    const cancel = [], frozenCut = [];
+    const cancel = [], frozenCut = [], merged = [];
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const m = st.hl[i][j] + st.hl[j][i];
         if (!m) continue;
+        if (keep) {
+          if (st.hlF[i][j] + st.hlF[j][i]) merged.push('$' + T(i) + '\\rightleftarrows ' + T(j) + '$');
+          if (Math.min(st.A[i][j], st.A[j][i]) > 0) cancel.push('$' + T(i) + '\\rightleftarrows ' + T(j) + '$');
+          continue;
+        }
         if (fr[i] && fr[j]) frozenCut.push('$' + T(i) + '\\text{–}' + T(j) + '$');
         else cancel.push('$' + T(i) + '\\rightleftarrows ' + T(j) + (st.hl[i][j] > 1 ? '\\ (\\times ' + st.hl[i][j] + ')' : '') + '$');
       }
@@ -241,8 +273,14 @@
     const rows = [];
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        if (i === k || j === k || Bnew[i][j] === Bold[i][j]) continue;
+        if (i === k || j === k) continue;
         const bik = Bold[i][k], bkj = Bold[k][j];
+        if (keep && fr[i] && fr[j]) {
+          const x = opts.Eold[i][j], y = opts.Enew[i][j];
+          if (x !== y) rows.push("\\hat b'_{" + sub2(T(i), T(j)) + '} &= ' + x + ' + \\tfrac12\\bigl(|' + bik + '|\\cdot ' + par(bkj) + ' + ' + par(bik) + '\\cdot|' + bkj + '|\\bigr) = ' + y);
+          continue;
+        }
+        if (Bnew[i][j] === Bold[i][j]) continue;
         if (fr[i] && fr[j]) { rows.push("b'_{" + sub2(T(i), T(j)) + '} &= 0 \\quad\\text{(both frozen)}'); continue; }
         rows.push("b'_{" + sub2(T(i), T(j)) + '} &= ' + Bold[i][j] + ' + \\tfrac12\\bigl(|' + bik + '|\\cdot ' + par(bkj) + ' + ' + par(bik) + '\\cdot|' + bkj + '|\\bigr) = ' + Bnew[i][j]);
       }
@@ -252,11 +290,33 @@
       '**Step 1** (compose). ' + (paths.length ? 'For each path $i\\to ' + K + '\\to j$ add an arrow $i\\to j$: ' + listT(paths) + '.' : 'There is no path $i\\to ' + K + '\\to j$, so no arrow is added.'),
       '**Step 2** (reverse). ' + (inc.length ? 'Reverse the arrows incident to $' + K + '$: ' + listT(inc) + '.' : 'There are no arrows at $' + K + '$.'),
       '**Step 3** (cancel). ' + (cancel.length ? 'Remove the 2-cycles ' + listT(cancel) : 'There are no 2-cycles') +
-        (frozenCut.length ? ', and the arrows between frozen vertices ' + listT(frozenCut) : '') + '.',
+        (frozenCut.length ? ', and the arrows between frozen vertices ' + listT(frozenCut) : '') +
+        (merged.length ? '; each 2-cycle formed by an unfrozen and a frozen arrow (' + listT(merged) + ') is replaced by a frozen arrow in the direction of the unfrozen one' : '') + '.',
       '**Matrix check.** By the Fomin–Zelevinsky formula $$\\begin{aligned} b\'_{' + sub2('i', K) + '} &= -b_{' + sub2('i', K) + '},\\\\ b\'_{ij} &= b_{ij} + \\tfrac12\\bigl(|b_{' + sub2('i', K) + '}|\\,b_{' + sub2(K, 'j') + '} + b_{' + sub2('i', K) + '}\\,|b_{' + sub2(K, 'j') + '}|\\bigr) \\quad (i,j\\neq ' + K + ').\\end{aligned}$$',
       shown.length ? 'The entries that change are $$\\begin{aligned}' + shown.join('\\\\ ') + '\\end{aligned}$$' + (rows.length > 6 ? ' and ' + (rows.length - 6) + ' more.' : '') : 'Apart from row and column $' + K + '$, no entry changes.',
-      'Both descriptions give the same skew-symmetric matrix, which is the quiver shown.'
+      keep ? 'Both descriptions give the same Euler matrix $\\hat B\' = E_k\\hat B E_k^{\\mathsf T}$ with $k = ' + K + '$ (Lemma 4.2 of [CCJ]), which is the ice quiver shown.'
+        : 'Both descriptions give the same skew-symmetric matrix, which is the quiver shown.'
     ];
+  }
+
+  /** What the mutation does to the Poisson coefficient matrix Λ (Proposition 4.3 of [CCJ]). */
+  function lambdaMutationLines(Eold, k) {
+    const fr = frozenArr();
+    if (!fr.some(Boolean)) return [];
+    try {
+      const before = LC.compatiblePair(Eold);
+      if (!before.ok) return [];
+      const Enew = LC.eulerMatrix(state.B, ensureFF(), fr);
+      const after = LC.compatiblePair(Enew);
+      const predicted = LC.mutateLambda(before.Lambda, Eold, k);
+      const same = after.ok && JSON.stringify(after.Lambda) === JSON.stringify(predicted);
+      if (same) {
+        return ['**Poisson matrix.** By Proposition 4.3 of [CCJ], $\\Lambda\' = E_k^{\\mathsf T}\\Lambda E_k$; this agrees with $|\\det\\hat B\'|\\,(\\hat B\'^{-\\mathsf T} - \\hat B\'^{-1})$ computed from the mutated quiver, so $(\\tilde B\', \\Lambda\')$ is again compatible of type $' + after.type + '\\,I$.'];
+      }
+      return ['**Poisson matrix.** Arrows between frozen vertices are being ignored here, so this is not the extended Fomin–Zelevinsky mutation, and $\\Lambda$ of the new quiver differs from $E_k^{\\mathsf T}\\Lambda E_k$. Turn on “Frozen arrows” to keep $\\Lambda$ compatible with mutation.'];
+    } catch (e) {
+      return [];
+    }
   }
 
   /** 示例 / 导入的箭头列表 */
@@ -272,6 +332,7 @@
   }
   function restore(s) {
     state = JSON.parse(s);
+    ensureFF();
     if (selected != null && !byId(selected)) selected = null;
     pendingSource = null;
   }
@@ -301,15 +362,19 @@
   function structural() {
     state.seq = [];
     state.seed = null;
+    state.kkop = null;
     stopDemo();
   }
 
   // ---------------------------------------------------------------- 编辑操作
   function insertVertex(x, y, frozen, label) {
     const v = { id: nextId(), x: x, y: y, frozen: !!frozen, label: label || nextLabel() };
+    ensureFF();
     state.vertices.push(v);
     state.B.forEach((row) => row.push(0));
     state.B.push(new Array(state.vertices.length).fill(0));
+    state.FF.forEach((row) => row.push(0));
+    state.FF.push(new Array(state.vertices.length).fill(0));
     return v;
   }
 
@@ -322,14 +387,17 @@
     const n = state.vertices.length;
     proof('Add a ' + (v.frozen ? 'frozen' : 'mutable') + ' vertex $' + texEsc(v.label) + '$', [
       'The exchange matrix gains a zero row and a zero column, so now $B \\in M_{' + n + '}(\\mathbb{Z})$.',
-      v.frozen ? 'The vertex is frozen: it is never mutated, and an ice quiver has no arrows between frozen vertices.' : 'The vertex is mutable, so $\\mu_{' + texEsc(v.label) + '}$ may be applied.'
+      v.frozen ? 'The vertex is frozen: it is never mutated.' : 'The vertex is mutable, so $\\mu_{' + texEsc(v.label) + '}$ may be applied.'
     ]);
   }
 
   function removeVertexAt(i) {
+    ensureFF();
     state.vertices.splice(i, 1);
     state.B.splice(i, 1);
     state.B.forEach((row) => row.splice(i, 1));
+    state.FF.splice(i, 1);
+    state.FF.forEach((row) => row.splice(i, 1));
   }
 
   function deleteVertex(id) {
@@ -337,7 +405,11 @@
     if (i < 0) return;
     const label = state.vertices[i].label;
     const gone = [];
-    state.B[i].forEach((x, j) => { if (x > 0) gone.push(arrowText(i, j, x)); if (x < 0) gone.push(arrowText(j, i, -x)); });
+    state.vertices.forEach((_, j) => {
+      if (j === i) return;
+      if (arrowCount(i, j)) gone.push(arrowText(i, j, arrowCount(i, j)));
+      if (arrowCount(j, i)) gone.push(arrowText(j, i, arrowCount(j, i)));
+    });
     pushUndo();
     structural();
     removeVertexAt(i);
@@ -354,7 +426,26 @@
     if (i < 0 || j < 0) return;
     if (i === j) { toast('Loops (1-cycles) are not allowed in a quiver.'); return; }
     const vi = state.vertices[i], vj = state.vertices[j];
-    if (vi.frozen && vj.frozen) { toast('Ice quivers have no arrows between frozen vertices.'); return; }
+    if (vi.frozen && vj.frozen) {
+      if (!state.keepFF) { toast('Arrows between frozen vertices are ignored. Turn on “Frozen arrows” in the Ice quiver section to draw them.'); return; }
+      pushUndo();
+      structural();
+      ensureFF();
+      const lo = Math.min(i, j), hi = Math.max(i, j);
+      const d = ffPair(lo, hi);
+      const fwd = i < j;                       // the new frozen arrow goes lo → hi
+      const opp = fwd ? 'fji' : 'fij', same = fwd ? 'fij' : 'fji';
+      const cancelled = d[opp] > 0;
+      if (cancelled) d[opp] -= 1; else d[same] += 1;
+      setFFPair(lo, hi, d);
+      render();
+      proof('Draw a frozen arrow $' + T(i) + '\\to ' + T(j) + '$', [
+        cancelled ? 'It cancels a frozen arrow $' + T(j) + '\\to ' + T(i) + '$.'
+          : 'Both endpoints are frozen, so the arrow belongs to the frozen subquiver $F$ (drawn in blue).',
+        'In the Euler matrix, $\\hat b_{' + sub2(T(i), T(j)) + '} = ' + state.FF[i][j] + '$ and $\\hat b_{' + sub2(T(j), T(i)) + '} = ' + state.FF[j][i] + '$: a frozen arrow $i\\to j$ contributes $-1$ to $\\hat b_{ji}$ and nothing to $\\hat b_{ij}$. The exchange matrix $\\tilde B$ does not change.'
+      ]);
+      return;
+    }
     pushUndo();
     structural();
     const before = state.B[i][j];
@@ -371,6 +462,22 @@
   }
 
   function removeArrow(i, j) {
+    if (state.vertices[i] && state.vertices[j] && state.vertices[i].frozen && state.vertices[j].frozen) {
+      if (!arrowCount(i, j)) return;
+      pushUndo();
+      structural();
+      const lo = Math.min(i, j), hi = Math.max(i, j);
+      const d = ffPair(lo, hi);
+      const u = i < j ? 'uij' : 'uji', f = i < j ? 'fij' : 'fji';
+      const wasFrozen = !(d[u] > 0);
+      if (d[u] > 0) d[u] -= 1; else d[f] -= 1;
+      setFFPair(lo, hi, d);
+      render();
+      proof('Delete ' + (wasFrozen ? 'a frozen' : 'an unfrozen') + ' arrow $' + T(i) + '\\to ' + T(j) + '$', [
+        'Now $\\hat b_{' + sub2(T(i), T(j)) + '} = ' + state.FF[i][j] + '$ and $\\hat b_{' + sub2(T(j), T(i)) + '} = ' + state.FF[j][i] + '$; $\\tilde B$ does not change.'
+      ]);
+      return;
+    }
     if (!(state.B[i] && state.B[i][j] > 0)) return;
     pushUndo();
     structural();
@@ -387,21 +494,40 @@
     if (i < 0 || state.vertices[i].frozen === val) return;
     pushUndo();
     structural();
+    ensureFF();
+    if (!val) {
+      // arrows to frozen vertices become ordinary arrows
+      state.vertices.forEach((w, j) => {
+        if (j === i || !w.frozen) return;
+        const d = i < j ? ffPair(i, j) : ffPair(j, i);
+        const net = (d.uij + d.fij - d.uji - d.fji) * (i < j ? 1 : -1);
+        state.B[i][j] = net || 0;
+        state.B[j][i] = -net || 0;
+        state.FF[i][j] = state.FF[j][i] = 0;
+      });
+    }
     state.vertices[i].frozen = val;
     if (val) {
       let removed = 0;
       state.vertices.forEach((w, j) => {
         if (j !== i && w.frozen && state.B[i][j] !== 0) {
-          removed += Math.abs(state.B[i][j]);
+          const c = state.B[i][j];
+          removed += Math.abs(c);
+          if (state.keepFF) {
+            // i → j (c > 0) becomes |c| frozen arrows: b̂_ji −= c;  j → i: b̂_ij −= |c|
+            if (c > 0) state.FF[j][i] -= c; else state.FF[i][j] += c;
+          }
           state.B[i][j] = 0;
           state.B[j][i] = 0;
         }
       });
-      if (removed) toast('Removed ' + removed + ' arrow(s) between frozen vertices.');
+      if (removed) toast(state.keepFF ? removed + ' arrow(s) to other frozen vertices became frozen arrows.' : 'Removed ' + removed + ' arrow(s) between frozen vertices.');
       render();
       proof('Freeze vertex $' + T(i) + '$', [
         'A frozen vertex is never mutated: its row stays in $\\tilde B$, but its column is dropped.',
-        removed ? 'An ice quiver has no arrows between frozen vertices, so $' + removed + '$ arrow(s) were removed.' : 'It had no arrows to other frozen vertices, so $B$ is unchanged.'
+        !removed ? 'It had no arrows to other frozen vertices, so $B$ is unchanged.'
+          : state.keepFF ? 'Its $' + removed + '$ arrow(s) to other frozen vertices now lie in the frozen subquiver $F$ (blue); they do not affect $\\tilde B$.'
+            : 'Arrows between frozen vertices are being ignored, so $' + removed + '$ arrow(s) were removed.'
       ]);
       return;
     }
@@ -443,12 +569,17 @@
   // ---------------------------------------------------------------- 变异
   function applyMutation(i) {
     const fr = frozenArr();
-    if (!state.seq.length) state.seed = JSON.stringify(state.B);
-    const stages = Q.mutationStages(state.B, i, fr);
-    const Bold = state.B;
+    ensureFF();
+    const keep = !!state.keepFF;
+    if (!state.seq.length) state.seed = JSON.stringify({ B: state.B, FF: state.FF });
+    const stages = keep ? LC.mutationStages(state.B, state.FF, fr, i) : Q.mutationStages(state.B, i, fr);
+    const Bold = state.B, FFold = state.FF;
+    const Eold = LC.eulerMatrix(Bold, FFold, fr);
     state.B = Q.mutate(state.B, i, fr);
+    if (keep) state.FF = LC.mutateIce(Bold, FFold, fr, i).FF;
     state.seq.push(state.vertices[i].id);
-    proof('Mutation $\\mu_{' + T(i) + '}$', mutationProof(Bold, state.B, i, fr, stages), { proof: true, qed: true });
+    const lines = mutationProof(Bold, state.B, i, fr, stages, { keep: keep, Eold: Eold, Enew: LC.eulerMatrix(state.B, state.FF, fr) });
+    proof('Mutation $\\mu_{' + T(i) + '}$', lines.concat(lambdaMutationLines(Eold, i)), { proof: true, qed: true });
     return stages;
   }
 
@@ -500,7 +631,10 @@
     stopDemo();
     pushUndo();
     const seqLabels = state.seq.map((id) => { const v = byId(id); return '\\mu_{' + (v ? texEsc(v.label) : '?') + '}'; });
-    state.B = JSON.parse(state.seed);
+    const seed = JSON.parse(state.seed);
+    if (Array.isArray(seed)) state.B = seed;
+    else { state.B = seed.B; state.FF = seed.FF; }
+    ensureFF();
     state.seq = [];
     state.seed = null;
     render();
@@ -562,6 +696,15 @@
     pushUndo();
     structural();
     const cnt = state.vertices.filter((v) => v.frozen).length;
+    ensureFF();
+    for (let i = 0; i < state.vertices.length; i++) for (let j = i + 1; j < state.vertices.length; j++) {
+      if (!(state.vertices[i].frozen && state.vertices[j].frozen)) continue;
+      const d = ffPair(i, j);
+      const net = d.uij + d.fij - d.uji - d.fji;
+      state.B[i][j] = net || 0;
+      state.B[j][i] = -net || 0;
+      state.FF[i][j] = state.FF[j][i] = 0;
+    }
     state.vertices.forEach((v) => { v.frozen = false; });
     render();
     proof('Unfreeze all', ['$' + cnt + '$ frozen vertices become mutable; $B$ is unchanged and $\\tilde B$ is now the full matrix.']);
@@ -624,7 +767,7 @@
   function clearAll() {
     if (!state.vertices.length) return;
     pushUndo();
-    state = { vertices: [], B: [], seq: [], seed: null };
+    state = { vertices: [], B: [], FF: [], seq: [], seed: null, keepFF: !!state.keepFF };
     selected = null;
     stopDemo();
     render();
@@ -705,7 +848,7 @@
       B[i][j] += c;
       B[j][i] -= c;
     });
-    return { vertices: vertices, B: B, seq: [], seed: null };
+    return { vertices: vertices, B: B, FF: Q.zeros(n), seq: [], seed: null, keepFF: !!state.keepFF };
   }
 
   function loadPreset(name) {
@@ -743,12 +886,12 @@
   function computePA() {
     const o = paOptions();
     const V = state.vertices;
-    const key = JSON.stringify([state.B, V.map((v) => v.frozen), o]);
+    const key = JSON.stringify([state.B, state.FF, V.map((v) => v.frozen), o]);
     if (paCache.key === key) return paCache.value;
     const mut = [], frz = [];
     V.forEach((v, i) => (v.frozen ? frz : mut).push(i));
     const verts = o.mutableOnly ? mut : mut.concat(frz);
-    const A = verts.map((i) => verts.map((j) => Math.max(state.B[i][j], 0)));
+    const A = verts.map((i) => verts.map((j) => arrowCount(i, j)));
     const pa = Q.pathAlgebra(A, o.trunc ? { truncate: o.L } : {});
     const value = { pa: pa, verts: verts, opts: o };
     paCache = { key: key, value: value };
@@ -920,7 +1063,7 @@
   function prepareHomInspector(value) {
     const info = computePA();
     const cat = $('ar-cat').value;
-    const A = info.verts.map((i) => info.verts.map((j) => Math.max(state.B[i][j], 0)));
+    const A = info.verts.map((i) => info.verts.map((j) => arrowCount(i, j)));
     const key = JSON.stringify([A, info.verts]);
     const selectionKey = JSON.stringify([key, cat, info.opts.trunc]);
     if (selectionKey !== homSelectionKey) {
@@ -1044,9 +1187,9 @@
   function computeAR() {
     const info = computePA();
     const layers = arLayers();
-    const key = JSON.stringify([state.B, info.verts, layers]);
+    const key = JSON.stringify([state.B, state.FF, info.verts, layers]);
     if (arCache.key === key) return arCache.value;
-    const A = info.verts.map((i) => info.verts.map((j) => Math.max(state.B[i][j], 0)));
+    const A = info.verts.map((i) => info.verts.map((j) => arrowCount(i, j)));
     const ar = info.verts.length ? AR.arQuiver(A, { layers: layers }) : { ok: false, reason: 'empty' };
     const value = { ar: ar, info: info };
     arCache = { key: key, value: value };
@@ -1125,7 +1268,7 @@
     if (!info.opts.mutableOnly && state.vertices.some((v) => v.frozen)) {
       const mut = [];
       state.vertices.forEach((v, i) => { if (!v.frozen) mut.push(i); });
-      const A = mut.map((i) => mut.map((j) => Math.max(state.B[i][j], 0)));
+      const A = mut.map((i) => mut.map((j) => arrowCount(i, j)));
       if (mut.length && AR.topoOrder(A)) add('Mutable part only (it is acyclic)', () => { $('pa-mutable').checked = true; render(); });
     }
     if (state.seed) add('Back to initial seed', backToSeed);
@@ -1159,9 +1302,9 @@
     const info = computePA();
     const [a, b] = arShiftRange();
     const layers = arLayers();
-    const key = JSON.stringify([state.B, info.verts, cat, a, b, layers]);
+    const key = JSON.stringify([state.B, state.FF, info.verts, cat, a, b, layers]);
     if (derCache.key === key) return derCache.value;
-    const A = info.verts.map((i) => info.verts.map((j) => Math.max(state.B[i][j], 0)));
+    const A = info.verts.map((i) => info.verts.map((j) => arrowCount(i, j)));
     const D = AR.derivedQuiver(A, { category: cat, dmin: a, dmax: b, layers: layers });
     derCache = { key: key, value: D };
     return D;
@@ -1714,6 +1857,309 @@
     return m;
   }
 
+  // ---------------------------------------------------------------- Λ-invariant (Canesin–Cao–Janssens)
+  // [CCJ] R. Canesin, P. Cao, G. Janssens, Additive categorification of the monoidal Λ-invariant, arXiv:2605.03925.
+  const CCJ_REF = '[CCJ] R. Canesin, P. Cao, G. Janssens, *Additive categorification of the monoidal* $\\Lambda$*-invariant*, arXiv:2605.03925.';
+  const LAM_MAX_VERTS = 60;
+  let lamCache = { key: null, value: null };
+  let kkopCache = { key: null, value: null };
+
+  function lambdaInfo() {
+    const fr = frozenArr();
+    const key = JSON.stringify([state.B, ensureFF(), fr]);
+    if (lamCache.key === key) return lamCache.value;
+    const E = LC.eulerMatrix(state.B, state.FF, fr);
+    let cp;
+    try { cp = LC.compatiblePair(E); } catch (e) { cp = { ok: false, det: null }; }
+    const chk = cp.ok ? LC.compatibilityCheck(E, cp.Lambda, fr, cp.type) : null;
+    const mut = [], frz = [];
+    fr.forEach((f, i) => (f ? frz : mut).push(i));
+    const value = { E: E, cp: cp, chk: chk, fr: fr, order: mut.concat(frz), nMut: mut.length };
+    lamCache = { key: key, value: value };
+    return value;
+  }
+
+  /** The data of Q^[a,b](w₀) if the quiver on the canvas was built by the generator. */
+  function kkopInfo() {
+    const k = state.kkop;
+    if (!k) return null;
+    const key = JSON.stringify(k);
+    if (kkopCache.key !== key) {
+      const d = LC.dynkin(k.type, k.n);
+      const q = d ? LC.kkopQuiver(d, k.word, k.a, k.b) : null;
+      kkopCache = { key: key, value: q && q.ok ? q : null };
+    }
+    const q = kkopCache.value;
+    return q && q.verts.length === state.vertices.length ? q : null;
+  }
+
+  const krTex = (k) => 'W^{(' + k.i + ')}_{' + k.r + ',\\,q^{' + k.p + '}}';
+  const typeTex = (d) => d.type + '_{' + d.n + '}';
+  const wordTex = (w) => '(' + w.join(',') + ')';
+  const PROPER_BY = {
+    adapted: ['Corollary 8.8', ''],
+    length: ['Corollary 8.20', ', since $\\ell(w_0)$ divides $b-a+1$'],
+    residue: ['Proposition 8.19', ', since the $[a,b]$-residue of $\\hat{\\mathbf w}_0$ has an adapted reduced word']
+  };
+  const properText = (by) => PROPER_BY[by][0] + ' of [CCJ]' + PROPER_BY[by][1];
+
+  function fillMatrixTable(table, M, order, mark) {
+    const V = state.vertices;
+    const esc = (t) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    let html = '<thead><tr><th></th>' + order.map((c) => '<th class="' + (V[c].frozen ? 'frozen' : '') + '">' + esc(V[c].label) + '</th>').join('') + '</tr></thead><tbody>';
+    order.forEach((r) => {
+      html += '<tr><th class="' + (V[r].frozen ? 'frozen' : '') + '">' + esc(V[r].label) + '</th>';
+      order.forEach((c) => {
+        const x = M[r][c];
+        html += '<td class="' + (x === 0 ? 'zero' : x > 0 ? 'pos' : 'neg') + (mark && mark(r, c) ? ' ff' : '') + '">' + x + '</td>';
+      });
+      html += '</tr>';
+    });
+    table.innerHTML = html + '</tbody>';
+  }
+
+  function renderLambda() {
+    const V = state.vertices;
+    $('opt-keepff').checked = !!state.keepFF;
+    const status = $('lam-status');
+    const info = lambdaInfo();
+    const cp = info.cp;
+    const show = V.length > 0;
+    $('lam-euler-wrap').hidden = !show;
+    $('lam-table-wrap').hidden = !(show && cp.ok);
+    $('lam-explain').disabled = !show;
+    status.className = 'lam-status';
+    if (!show) {
+      status.textContent = 'No vertices.';
+    } else if (!cp.ok) {
+      status.classList.add('warn');
+      status.textContent = cp.det === null ? 'The entries are too large to compute Λ.'
+        : 'det B̂ = 0, so Λ is not defined for this ice quiver.';
+    } else {
+      const d = Math.abs(cp.det);
+      status.textContent = 'det B̂ = ' + cp.det + '. (B̃, Λ) is a compatible pair: B̃ᵀΛ = ' + cp.type + '·(I | 0)' + (info.chk.ok ? ' ✓' : ' ✗') +
+        (d !== 1 ? ' Since det B̂ ≠ ±1, the relative Ginzburg algebra is not proper for any potential (Lemma 4.4).' : '');
+      if (d !== 1) status.classList.add('note');
+    }
+    const hint = $('lam-ff-hint');
+    hint.hidden = !!state.keepFF || info.fr.filter(Boolean).length < 2;
+    if (show) {
+      fillMatrixTable($('lam-euler'), info.E, info.order, (r, c) => r !== c && info.fr[r] && info.fr[c]);
+      if (cp.ok) fillMatrixTable($('lam-table'), cp.Lambda, info.order, null);
+    }
+
+    // the monoidal seed, if the quiver is a Q^[a,b](w₀)
+    const box = $('lam-kr');
+    box.textContent = '';
+    const q = kkopInfo();
+    if (!q) return;
+    const head = document.createElement('div');
+    head.className = 'lam-kr-head';
+    texToNodes(head, '$Q^{[' + q.a + ',' + q.b + ']}(\\mathbf w_0)$, $\\Delta = ' + typeTex(q.d) + '$, $\\mathbf w_0 = ' + wordTex(q.word) + '$');
+    box.appendChild(head);
+    const p1 = document.createElement('div');
+    p1.className = 'hint';
+    texToNodes(p1, q.proper.known
+      ? '$\\hat\\Gamma$ is proper (' + PROPER_BY[q.proper.by][0] + '), so $\\lambda_{ij} = [M_i, M_j]_{\\mathcal H}$ (Theorem A).'
+      : 'Properness of $\\hat\\Gamma$ is not known for this word and interval (Conjecture 8.1), so Theorem A is conjectural here.');
+    box.appendChild(p1);
+    if (!q.kr) {
+      const p2 = document.createElement('div');
+      p2.className = 'hint';
+      texToNodes(p2, '$\\mathbf w_0$ is not adapted to an orientation of $\\Delta$, so Theorem D does not apply; $(\\tilde B, \\Lambda)$ is still a compatible pair.');
+      box.appendChild(p2);
+      return;
+    }
+    const mutated = new Set(state.seq);
+    const p2 = document.createElement('div');
+    p2.className = 'hint';
+    texToNodes(p2, '$\\mathbf w_0$ is adapted, so by Theorem D the entries of $\\Lambda$ are the monoidal invariants: $\\lambda_{st} = \\Lambda(V_s, V_t)$' +
+      (mutated.size ? ', where mutated vertices carry the mutated simple modules.' : ' for the Kirillov–Reshetikhin modules below.'));
+    box.appendChild(p2);
+    const tbl = document.createElement('table');
+    tbl.className = 'dimtable lam-kr-table';
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>s</th><th>row</th><th>V<sub>s</sub></th></tr>';
+    tbl.appendChild(thead);
+    const tb = document.createElement('tbody');
+    q.verts.forEach((v, x) => {
+      const tr = document.createElement('tr');
+      const th = document.createElement('th');
+      th.textContent = V[x].label;
+      if (V[x].frozen) th.className = 'frozen';
+      const td1 = document.createElement('td');
+      td1.textContent = String(v.row);
+      const td2 = document.createElement('td');
+      td2.className = 'kr';
+      if (mutated.has(V[x].id)) td2.textContent = 'mutated';
+      else renderMath(td2, krTex(q.kr[x]), false);
+      tr.append(th, td1, td2);
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    const wrap = document.createElement('div');
+    wrap.className = 'matrix-scroll lam-kr-scroll';
+    wrap.appendChild(tbl);
+    box.appendChild(wrap);
+    const p3 = document.createElement('div');
+    p3.className = 'hint';
+    texToNodes(p3, '$W^{(i)}_{r,a} = L(Y_{i,a}Y_{i,aq^2}\\cdots Y_{i,aq^{2(r-1)}})$; height function $\\xi = (' + q.adapted.xi.slice(1).join(',') + ')$.');
+    box.appendChild(p3);
+  }
+
+  function texMatrix(M, order) {
+    const small = order.length > 5;
+    const body = order.map((r) => order.map((c) => M[r][c]).join(' & ')).join(' \\\\ ');
+    return small ? '\\left(\\begin{smallmatrix}' + body + '\\end{smallmatrix}\\right)' : '\\begin{pmatrix}' + body + '\\end{pmatrix}';
+  }
+
+  /** Proof-panel entry: the compatible pair of the quiver on the canvas. */
+  function lambdaProof() {
+    const V = state.vertices;
+    if (!V.length) return;
+    const info = lambdaInfo();
+    const cp = info.cp, order = info.order;
+    const showM = order.length <= 10;
+    const labels = order.map((i) => T(i)).join(',');
+    const lines = [
+      'Order the vertices as $(' + labels + ')$, unfrozen ones first. The Euler matrix $\\hat B$ has $\\hat b_{ii} = 0$ for unfrozen $i$, $\\hat b_{ii} = 1$ for frozen $i$, and $$\\hat b_{ij} = \\#\\{\\text{unfrozen arrows } i\\to j\\} - \\#\\{\\text{arrows } j\\to i\\}\\qquad(i\\ne j).$$' +
+        (showM ? ' Here $$\\hat B = ' + texMatrix(info.E, order) + '.$$' : ' (It is displayed in the $\\Lambda$ panel.)')
+    ];
+    if (!cp.ok) {
+      lines.push(cp.det === null ? 'Its entries are too large to continue.'
+        : '$\\det\\hat B = 0$, so the compatible pair is not defined. In particular the relative Ginzburg algebra $\\hat\\Gamma(Q,F,W)$ is not proper for any potential $W$ (Lemma 4.4 of [CCJ]).');
+      lines.push(CCJ_REF);
+      proof('**Remark** ([CCJ, §4.1]). No compatible pair', lines, { proof: false, qed: false });
+      return;
+    }
+    lines.push('$\\det\\hat B = ' + cp.det + '\\ne 0$, so $$\\Lambda = |\\det\\hat B|\\,\\bigl(\\hat B^{-\\mathsf T} - \\hat B^{-1}\\bigr)' + (showM ? ' = ' + texMatrix(cp.Lambda, order) : '') + '$$ is a skew-symmetric integer matrix.');
+    lines.push('The matrix $\\tilde B$ is formed by the first $n = ' + info.nMut + '$ columns of $\\hat B$, and the first $n$ rows of $\\hat B$ are $-\\tilde B^{\\mathsf T}$. Hence $\\tilde B^{\\mathsf T}\\hat B^{-\\mathsf T} = (I\\mid 0)$ and $\\tilde B^{\\mathsf T}\\hat B^{-1} = (-I\\mid 0)$, so $$\\tilde B^{\\mathsf T}\\Lambda = 2\\,|\\det\\hat B|\\,(I\\mid 0) = ' + cp.type + '\\,(I\\mid 0).$$' +
+      (info.chk.ok ? ' This was also checked entry by entry for the quiver shown.' : ' Warning: the entrywise check failed for this quiver.'));
+    const q = kkopInfo();
+    const bracket = '\\begin{aligned}\\lambda_{ij} &= [M_i, M_j]_{\\mathcal H}\\\\ &= \\sum_{p\\ge 0}(-1)^p\\bigl(\\dim\\operatorname{Ext}^{-p}_{\\mathcal H}(M_i, M_j) - \\dim\\operatorname{Ext}^{-p}_{\\mathcal H}(M_j, M_i)\\bigr)\\end{aligned}';
+    if (Math.abs(cp.det) !== 1) {
+      lines.push('Here $|\\det\\hat B| = ' + Math.abs(cp.det) + '\\ne 1$. If $\\hat\\Gamma(Q,F,W)$ were proper for some potential $W$, then $\\hat B$ would be invertible over $\\mathbb Z$ (Lemma 4.4 of [CCJ]). So it is never proper for this ice quiver, and Theorem A does not apply; the pair $(\\tilde B,\\Lambda)$ is compatible all the same.');
+    } else if (q && q.proper.known) {
+      lines.push('For this quiver $\\hat\\Gamma$ is proper by ' + properText(q.proper.by) + '. By Theorem A, $$' + bracket + '$$ for the reachable rigid objects $M_i$ of the Higgs category $\\mathcal H$ attached to this seed.');
+      if (q.kr) {
+        const mutated = state.seq.length > 0;
+        let ex = '';
+        if (!mutated) {
+          let best = null;
+          for (let x = 0; x < V.length && !best; x++) for (let y = x + 1; y < V.length && !best; y++) if (cp.Lambda[x][y] !== 0) best = [x, y];
+          if (best) ex = ' For example $\\Lambda\\bigl(' + krTex(q.kr[best[0]]) + ',\\,' + krTex(q.kr[best[1]]) + '\\bigr) = \\lambda_{' + sub2(T(best[0]), T(best[1])) + '} = ' + cp.Lambda[best[0]][best[1]] + '$.';
+        }
+        lines.push('Moreover $\\mathbf w_0$ is adapted to an orientation of $\\Delta$. By Theorem D of [CCJ], the Kashiwara–Kim–Oh–Park invariant of the corresponding simple $U_q\'(\\hat{\\mathfrak g})$-modules is $$\\Lambda(V_s, V_t) = \\lambda_{st},$$ ' +
+          (mutated ? 'where the $V_s$ form the monoidal seed obtained from the initial one by the same mutations.'
+            : 'where $V_s = W^{(i_s)}_{r_s,\\,q^{p_s}}$ are the Kirillov–Reshetikhin modules of the initial monoidal seed.' + ex));
+      }
+    } else if (q) {
+      lines.push('For this word and interval, properness of $\\hat\\Gamma$ is not covered by Theorem C of [CCJ]; it is Conjecture 8.1. If it holds, Theorem A gives $$' + bracket + '$$');
+    } else {
+      lines.push('If $W$ is a non-degenerate potential for which $\\hat\\Gamma(Q,F,W)$ is proper, Theorem A of [CCJ] gives $$' + bracket + '$$ for the objects $M_i$ of the Higgs category attached to this seed. Properness is not checked here: $|\\det\\hat B| = 1$ is only a necessary condition (Lemma 4.4).');
+    }
+    lines.push(CCJ_REF);
+    proof('**Theorem** ([CCJ, Prop. 4.1, Thm. A]). The compatible pair $(\\tilde B, \\Lambda)$', lines, { proof: true, qed: false });
+  }
+
+  /** Proof-panel entry: how Q^[a,b](w₀) is built. */
+  function kkopProof(q) {
+    const d = q.d, N = d.N;
+    const starPairs = [];
+    for (let i = 1; i <= d.n; i++) if (q.star[i] !== i) starPairs.push(i + '^* = ' + q.star[i]);
+    const window_ = q.verts.map((v) => v.row).join(',');
+    const frozen = q.verts.filter((v) => v.frozen).map((v) => '$' + v.s + '$');
+    const count = (r) => q.arrows.filter((e) => e.rule === r).length;
+    const cyc = q.cycles.slice(0, 3).map((c) => '$' + c.concat([c[0]]).map((x) => q.verts[x].s).join('\\to ') + '$');
+    const lines = [
+      '$\\Delta = ' + typeTex(d) + '$ and $\\mathbf w_0 = ' + wordTex(q.word) + '$. Every prefix is reduced, because each root $s_{i_1}\\cdots s_{i_{k-1}}(\\alpha_{i_k})$ is positive, and the length is $\\ell(w_0) = ' + N + '$, the number of positive roots; so $\\mathbf w_0$ is a reduced word of the longest element. It gives ' +
+        (starPairs.length ? '$' + starPairs.join(',\\ ') + '$' : '$i^* = i$ for all $i$') + ', where $w_0(\\alpha_i) = -\\alpha_{i^*}$.',
+      'Extend $\\mathbf w_0$ to $\\hat{\\mathbf w}_0 = (i_s)_{s\\in\\mathbb Z}$ by $i_{s+' + N + '} = i_s^*$. On $[' + q.a + ',' + q.b + ']$ it reads $(' + window_ + ')$. Write $s^- = \\max\\{t < s : i_t = i_s\\}$.',
+      '**Vertices.** The integers $s\\in[' + q.a + ',' + q.b + ']$, with $s$ drawn on row $i_s$. A vertex is frozen when $s^- < ' + q.a + '$: here ' + listT(frozen, 12) + '.',
+      '**Arrows** $s\\to t$: (1) $t = s^-$ — $' + count(1) + '$ arrows; (2) $i_s\\sim i_t$ and $s^- < t^- < s < t$ — $' + count(2) + '$ arrows; (3) $i_s\\sim i_t$, $s < t$ and $s^-, t^- < ' + q.a + '$ — $' + count(3) + '$ frozen arrows (blue).',
+      '**Potential.** $W$ is the sum of the $' + q.cycles.length + '$ chordless cycles $s\\to t\\to t^-\\to\\cdots\\to s$, one for each arrow $s\\to t$ with $s < t$ and $t$ unfrozen' + (cyc.length ? ', e.g. ' + cyc.join(', ') : '') + '.',
+      q.adapted.adapted
+        ? '$\\mathbf w_0$ is a source sequence for the orientation with height function $\\xi = (' + q.adapted.xi.slice(1).join(',') + ')$, i.e. it is adapted. Hence $\\hat\\Gamma$ is proper (Corollary 8.8 of [CCJ]) and Theorem D applies.'
+        : q.proper.known ? '$\\mathbf w_0$ is not adapted to an orientation, but $\\hat\\Gamma$ is proper by ' + properText(q.proper.by) + '.'
+          : '$\\mathbf w_0$ is not adapted, and this case is not covered by Theorem C of [CCJ]: properness of $\\hat\\Gamma$ is Conjecture 8.1.'
+    ];
+    proof('**Construction** ([CCJ, §5.3]). The ice quiver $Q^{[' + q.a + ',' + q.b + ']}(\\mathbf w_0)$ with potential', lines, { proof: false, qed: false });
+  }
+
+  // ---- generator controls
+  function lamGenDynkin() {
+    return LC.dynkin($('lam-type').value, parseInt($('lam-rank').value, 10));
+  }
+  function lamGenRead() {
+    const d = lamGenDynkin();
+    if (!d) return { error: 'Choose A₁–A₈, D₄–D₈ or E₆–E₈.' };
+    const word = $('lam-word').value.split(/[\s,，;]+/).filter(Boolean).map(Number);
+    const a = parseInt($('lam-a').value, 10), b = parseInt($('lam-b').value, 10);
+    const chk = LC.checkWord(d, word);
+    if (!chk.longest) return { d: d, error: 'w₀: ' + (chk.error || 'not a reduced word of the longest element') + '.' };
+    if (!(Number.isInteger(a) && Number.isInteger(b) && a <= b)) return { d: d, error: 'Need integers a ≤ b.' };
+    if (b - a + 1 > LAM_MAX_VERTS) return { d: d, error: 'At most ' + LAM_MAX_VERTS + ' vertices: choose a shorter interval.' };
+    return { d: d, word: word, a: a, b: b, adapted: LC.adaptedTo(d, word).adapted };
+  }
+  function lamGenSync(resetWord) {
+    const d = lamGenDynkin();
+    const kind = $('lam-orient').value;
+    if (d && resetWord && kind !== 'custom') {
+      const w = LC.adaptedWord(d, LC.orientation(d, kind));
+      if (w) $('lam-word').value = w.join(' ');
+    }
+    const r = lamGenRead();
+    const st = $('lam-gen-status');
+    st.className = 'hint' + (r.error ? ' lam-bad' : '');
+    st.textContent = r.error ? r.error
+      : 'Reduced word of w₀, ℓ(w₀) = ' + r.d.N + '; ' + (r.adapted ? 'adapted to an orientation (Theorem D applies).' : 'not adapted (Λ is still defined when det B̂ ≠ 0).') +
+        ' ' + (r.b - r.a + 1) + ' vertices.';
+    $('lam-build').disabled = !!r.error;
+  }
+  function lamBuild() {
+    const r = lamGenRead();
+    if (r.error) { toast(r.error); return; }
+    const q = LC.kkopQuiver(r.d, r.word, r.a, r.b);
+    if (!q.ok) { toast(q.error); return; }
+    pushUndo();
+    stopDemo();
+    // rows = vertices of Δ, columns = positions s; compress horizontally only, so rows stay readable
+    const s = canvasSize();
+    const dx = Math.max(16, Math.min(74, (s.w - 110) / Math.max(1, q.b - q.a)));
+    const dy = Math.max(46, Math.min(88, (s.h * 0.5) / Math.max(1, r.d.n - 1)));
+    const w = (q.b - q.a) * dx, h = (r.d.n - 1) * dy;
+    const vertices = q.verts.map((v, k) => ({
+      id: k + 1, label: String(v.s), frozen: v.frozen,
+      x: s.w / 2 - w / 2 + (v.s - q.a) * dx, y: Math.max(56, s.h * 0.3 - h / 2) + (v.row - 1) * dy
+    }));
+    state = {
+      vertices: vertices, B: q.B, FF: q.FF, seq: [], seed: null, keepFF: true,
+      kkop: { type: r.d.type, n: r.d.n, word: r.word, a: r.a, b: r.b }
+    };
+    selected = null;
+    pendingSource = null;
+    fitToView(false);
+    render();
+    kkopProof(q);
+    lambdaProof();
+  }
+  function setKeepFF(on) {
+    if (!!state.keepFF === on) return;
+    ensureFF();
+    const has = state.FF.some((row) => row.some((x) => x !== 0));
+    pushUndo();
+    if (!on && has) {
+      structural();
+      state.FF = Q.zeros(state.vertices.length);
+      toast('Removed the arrows between frozen vertices.');
+    }
+    state.keepFF = on;
+    render();
+    proof(on ? 'Keep arrows between frozen vertices' : 'Ignore arrows between frozen vertices', [on
+      ? 'From now on arrows between frozen vertices are kept: you can draw frozen arrows (blue), and mutation follows the extended Fomin–Zelevinsky rule of Pressland, in which a path $u\\to k\\to w$ between frozen vertices $u, w$ gives an unfrozen arrow $u\\to w$. This is the setting of [CCJ]; the exchange matrix $\\tilde B$ is not affected.'
+      : 'Arrows between frozen vertices are discarded, as in the classical convention; $\\tilde B$ is not affected, but $\\Lambda$ no longer follows $\\mu_k(\\Lambda) = E_k^{\\mathsf T}\\Lambda E_k$.']);
+  }
+
   // ---------------------------------------------------------------- 绘制
   function trimDist(v, ux, uy) {
     return v.frozen ? H / Math.max(Math.abs(ux), Math.abs(uy)) : R;
@@ -1722,14 +2168,18 @@
   function drawEdges(view) {
     layerE.textContent = '';
     const V = state.vertices;
-    const A = view.A, hl = view.hl;
+    const A = view.A, hl = view.hl, Fz = view.Fz, hlF = view.hlF;
     const n = V.length;
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
-        if (i === j || !A[i] || !(A[i][j] > 0)) continue;
-        const c = A[i][j];
+        if (i === j || !A[i]) continue;
+        const nu = A[i][j] || 0;                       // unfrozen arrows
+        const nf = Fz && Fz[i] ? Fz[i][j] || 0 : 0;    // frozen arrows
+        const c = nu + nf;
+        if (!(c > 0)) continue;
         const h = hl ? hl[i][j] : 0;
-        const two = A[j][i] > 0;
+        const hF = hlF && hlF[i] ? hlF[i][j] || 0 : 0;
+        const two = (A[j][i] || 0) + (Fz && Fz[j] ? Fz[j][i] || 0 : 0) > 0;
         const a = V[i], b = V[j];
         const dx = b.x - a.x, dy = b.y - a.y;
         const len = Math.hypot(dx, dy);
@@ -1741,25 +2191,46 @@
         const g = el('g', { class: 'edge-group', 'data-i': i, 'data-j': j }, layerE);
         const drawn = c <= MAX_PARALLEL ? c : 1;
         const base = two ? ((drawn - 1) * GAP / 2 + 6) : 0;
+        // if another vertex sits on the straight segment, bend the arrow around it
+        let bend = 0;
+        for (let k = 0; k < n && !bend; k++) {
+          if (k === i || k === j) continue;
+          const px = V[k].x - a.x, py = V[k].y - a.y;
+          const along = px * ux + py * uy;
+          if (along > 0 && along < len && Math.abs(px * nx + py * ny) < R + 6) bend = Math.max(36, 0.17 * len);
+        }
+        const curve = (off) => {
+          const p1x = a.x + nx * off, p1y = a.y + ny * off, p2x = b.x + nx * off, p2y = b.y + ny * off;
+          const cx = (a.x + b.x) / 2 + nx * (bend + off), cy = (a.y + b.y) / 2 + ny * (bend + off);
+          let d1x = cx - p1x, d1y = cy - p1y; const l1 = Math.hypot(d1x, d1y); d1x /= l1; d1y /= l1;
+          let d2x = cx - p2x, d2y = cy - p2y; const l2 = Math.hypot(d2x, d2y); d2x /= l2; d2y /= l2;
+          const s1 = trimDist(a, d1x, d1y) + 1.5, s2 = trimDist(b, d2x, d2y) + 2;
+          return 'M' + (p1x + d1x * s1) + ',' + (p1y + d1y * s1) + ' Q' + cx + ',' + cy + ' ' + (p2x + d2x * s2) + ',' + (p2y + d2y * s2);
+        };
         for (let t = 0; t < drawn; t++) {
           const off = base + (t - (drawn - 1) / 2) * GAP;
-          const color = (c <= MAX_PARALLEL ? t < h : h > 0) ? view.color : null;
-          el('line', {
+          const isF = c <= MAX_PARALLEL ? t >= nu : nu === 0;
+          const lit = c <= MAX_PARALLEL ? (isF ? t - nu < hF : t < h) : h + hF > 0;
+          const color = lit ? view.color : null;
+          const cls = 'edge' + (isF ? ' frozen-arrow' : '') + (color ? ' ' + color : '') + (c > MAX_PARALLEL ? ' thick' : '');
+          const marker = 'url(#ah-' + (color || (isF ? 'frozen' : 'base')) + ')';
+          if (bend) el('path', { d: curve(off), class: cls, 'marker-end': marker }, g);
+          else el('line', {
             x1: a.x + ux * t1 + nx * off, y1: a.y + uy * t1 + ny * off,
             x2: b.x - ux * t2 + nx * off, y2: b.y - uy * t2 + ny * off,
-            class: 'edge' + (color ? ' ' + color : '') + (c > MAX_PARALLEL ? ' thick' : ''),
-            'marker-end': 'url(#ah-' + (color || 'base') + ')'
+            class: cls, 'marker-end': marker
           }, g);
         }
         if (c > MAX_PARALLEL) {
-          const mx = (a.x + b.x) / 2 + nx * base, my = (a.y + b.y) / 2 + ny * base;
-          const color = h > 0 ? view.color : '';
+          const mx = (a.x + b.x) / 2 + nx * (base + bend / 2), my = (a.y + b.y) / 2 + ny * (base + bend / 2);
+          const color = h + hF > 0 ? view.color : '';
           el('circle', { cx: mx, cy: my, r: 11, class: 'edge-label-bg ' + color }, g);
           const tx = el('text', { x: mx, y: my, class: 'edge-label' }, g);
           tx.textContent = String(c);
         }
         if (!demo) {
-          el('line', {
+          if (bend) el('path', { d: curve(base), class: 'edge-hit' }, g);
+          else el('line', {
             x1: a.x + nx * base, y1: a.y + ny * base, x2: b.x + nx * base, y2: b.y + ny * base,
             class: 'edge-hit'
           }, g);
@@ -1794,7 +2265,8 @@
   }
 
   function renderCanvas() {
-    const view = demo ? demo.stages[demo.step] : { A: Q.toCounts(state.B), hl: null, color: 'none' };
+    let view = demo ? demo.stages[demo.step] : null;
+    if (!view) { const a = arrowsNow(); view = { A: a.U, Fz: a.Fz, hl: null, hlF: null, color: 'none' }; }
     drawEdges(view);
     drawVertices();
   }
@@ -1836,6 +2308,8 @@
     const V = state.vertices;
     let arrows = 0, maxMult = 0;
     state.B.forEach((row) => row.forEach((x) => { if (x > 0) { arrows += x; maxMult = Math.max(maxMult, x); } }));
+    const fa = arrowsNow();
+    V.forEach((v, i) => V.forEach((w, j) => { if (v.frozen && w.frozen) { arrows += fa.U[i][j] + fa.Fz[i][j]; maxMult = Math.max(maxMult, fa.U[i][j], fa.Fz[i][j]); } }));
     const nm = V.filter((v) => !v.frozen).length;
     const items = [
       ['Vertices', V.length],
@@ -1905,6 +2379,7 @@
     renderCanvas();
     renderMatrix();
     renderStats();
+    renderLambda();
     renderPathAlgebra();
     renderSeq();
     renderSelection();
@@ -1928,6 +2403,7 @@
       const o = JSON.parse(s);
       if (!validState(o)) return false;
       state = o;
+      ensureFF();
       return true;
     } catch (e) {
       return false;
@@ -1942,6 +2418,8 @@
     if (o.vertices.some((v) => typeof v.id !== 'number' || typeof v.label !== 'string' || !isFinite(v.x) || !isFinite(v.y))) return false;
     if (!Array.isArray(o.seq)) o.seq = [];
     if (typeof o.seed !== 'string') o.seed = null;
+    o.keepFF = !!o.keepFF;
+    if (o.kkop && !(Array.isArray(o.kkop.word) && Number.isInteger(o.kkop.a) && Number.isInteger(o.kkop.b))) o.kkop = null;
     return true;
   }
 
@@ -2117,6 +2595,24 @@
 
   $('opt-full').addEventListener('change', renderMatrix);
 
+  // Λ panel
+  $('opt-keepff').addEventListener('change', (e) => setKeepFF(e.target.checked));
+  $('lam-explain').addEventListener('click', lambdaProof);
+  ['lam-type', 'lam-rank', 'lam-orient'].forEach((id) => $(id).addEventListener('change', () => {
+    if (id === 'lam-type') {
+      const lim = { A: [1, 8, 3], D: [4, 8, 4], E: [6, 8, 6] }[$('lam-type').value];
+      const rk = $('lam-rank');
+      rk.min = lim[0]; rk.max = lim[1];
+      if (!(+rk.value >= lim[0] && +rk.value <= lim[1])) rk.value = lim[2];
+    }
+    lamGenSync(true);
+  }));
+  $('lam-rank').addEventListener('input', () => lamGenSync(true));
+  $('lam-word').addEventListener('input', () => { $('lam-orient').value = 'custom'; lamGenSync(false); });
+  ['lam-a', 'lam-b'].forEach((id) => $(id).addEventListener('input', () => lamGenSync(false)));
+  $('lam-build').addEventListener('click', lamBuild);
+  lamGenSync(true);
+
   // 路代数面板
   ['pa-rel', 'pa-mutable', 'pa-kind'].forEach((id) => $(id).addEventListener('change', () => {
     if (id === 'pa-kind' && modHL) modHL = { kind: $('pa-kind').value, id: modHL.id };
@@ -2235,7 +2731,10 @@
     const V = state.vertices;
     const vs = V.map((v) => '    ' + JSON.stringify({ label: v.label, x: Math.round(v.x), y: Math.round(v.y), frozen: !!v.frozen }));
     const ms = state.B.map((r) => '    ' + JSON.stringify(r));
-    return '{\n  "format": "quiver-mutation",\n  "version": 1,\n  "vertices": [\n' + vs.join(',\n') + '\n  ],\n  "matrix": [\n' + ms.join(',\n') + '\n  ]\n}\n';
+    ensureFF();
+    const hasFF = state.FF.some((r) => r.some((x) => x !== 0));
+    const fs = hasFF ? ',\n  "euler_frozen": [\n' + state.FF.map((r) => '    ' + JSON.stringify(r)).join(',\n') + '\n  ]' : '';
+    return '{\n  "format": "quiver-mutation",\n  "version": 1,\n  "vertices": [\n' + vs.join(',\n') + '\n  ],\n  "matrix": [\n' + ms.join(',\n') + '\n  ]' + fs + '\n}\n';
   }
 
   function exportMatrix() {
@@ -2275,6 +2774,12 @@
         }
       }
     }
+    const fa = arrowsNow();
+    for (let i = 0; i < V.length; i++) for (let j = 0; j < V.length; j++) {
+      if (!(V[i].frozen && V[j].frozen) || i === j) continue;
+      for (let t = 0; t < fa.Fz[i][j]; t++) s += '  \\draw[->,blue] (v' + (i + 1) + ') to' + (t ? '[bend left=' + 10 * t + ']' : '') + ' (v' + (j + 1) + ');  % frozen arrow\n';
+      for (let t = 0; t < fa.U[i][j]; t++) s += '  \\draw[->] (v' + (i + 1) + ') to[bend right=' + 10 * (t + 1) + '] (v' + (j + 1) + ');\n';
+    }
     return s + '\\end{tikzpicture}\n';
   }
 
@@ -2296,6 +2801,7 @@
         frozen: !!v.frozen
       }));
       next = { vertices: vertices, B: o.matrix, seq: [], seed: null };
+      if (Array.isArray(o.euler_frozen)) next.FF = o.euler_frozen;
     } else {
       const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && l[0] !== '#' && l[0] !== '%');
       let frozen = [];
@@ -2331,9 +2837,17 @@
         next.B[i][j] = 0;
       }
     }
+    if (next.FF) {
+      const okFF = next.FF.length === n && next.FF.every((r, i) => Array.isArray(r) && r.length === n && r.every((x, j) =>
+        Number.isInteger(x) && (x === 0 || (i !== j && next.vertices[i].frozen && next.vertices[j].frozen))));
+      const okSum = okFF && next.FF.every((r, i) => r.every((x, j) => x + next.FF[j][i] <= 0));
+      if (!okSum) { toast('“euler_frozen” must be an integer matrix supported on pairs of frozen vertices, with b̂_ij + b̂_ji ≤ 0.'); return false; }
+      next.keepFF = true;
+    } else next.keepFF = !!state.keepFF;
     pushUndo();
     stopDemo();
     state = next;
+    ensureFF();
     selected = null;
     render();
     toast(removed ? 'Imported (ignored ' + removed + ' arrow(s) between frozen vertices).' : 'Imported.');
@@ -2379,6 +2893,8 @@
     importText: importText,
     computePA: computePA,
     computeAR: computeAR,
+    lambdaInfo: lambdaInfo,
+    kkopInfo: kkopInfo,
     exportTikZ: exportTikZ
   };
 })();

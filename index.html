@@ -61,6 +61,7 @@
           <button id="btn-unfreeze">Unfreeze all</button>
           <button id="btn-remove-frozen">Remove frozen vertices</button>
         </div>
+        <label class="check" title="Keep arrows between frozen vertices: frozen arrows (blue) can be drawn, and mutation follows the extended Fomin–Zelevinsky rule (Pressland). Needed for the Λ-invariant."><input type="checkbox" id="opt-keepff"> Frozen arrows (keep arrows between frozen vertices)</label>
       </section>
 
       <section>
@@ -99,6 +100,7 @@
           <marker id="ah-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah green"/></marker>
           <marker id="ah-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah orange"/></marker>
           <marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah red"/></marker>
+          <marker id="ah-frozen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah frozen"/></marker>
           <marker id="ah-temp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,1 L10,5 L0,9 z" class="ah temp"/></marker>
         </defs>
         <g id="layer-edges"></g>
@@ -130,6 +132,7 @@
       <div class="legend">
         <span><svg width="18" height="18"><circle cx="9" cy="9" r="7" class="lg-mut"/></svg>Mutable vertex</span>
         <span><svg width="18" height="18"><rect x="2" y="2" width="14" height="14" class="lg-frz"/></svg>Frozen vertex</span>
+        <span><svg width="22" height="18"><line x1="1" y1="9" x2="21" y2="9" class="lg-farrow"/></svg>Frozen arrow</span>
       </div>
     </section>
 
@@ -154,6 +157,53 @@
         <p class="hint" id="matrix-caption"></p>
         <div class="matrix-scroll"><table id="matrix" class="matrix"></table></div>
         <p class="hint">Entries are editable: b<sub>ij</sub> = #arrows i→j − #arrows j→i.</p>
+      </section>
+
+      <section id="lam-section">
+        <h2>Λ-invariant</h2>
+        <p class="hint">After Canesin–Cao–Janssens, <a href="https://arxiv.org/abs/2605.03925" target="_blank" rel="noopener">arXiv:2605.03925</a>. An ice quiver with invertible Euler matrix B̂ carries a compatible pair (B̃, Λ), where Λ = |det B̂|·(B̂⁻ᵀ − B̂⁻¹).</p>
+        <div id="lam-status" class="lam-status"></div>
+        <p class="hint" id="lam-ff-hint" hidden>Arrows between frozen vertices are being ignored, so Λ is not compatible with mutation. Turn on “Frozen arrows” in the Ice quiver section.</p>
+        <details id="lam-euler-wrap">
+          <summary>Euler matrix B̂</summary>
+          <div class="matrix-scroll"><table id="lam-euler" class="dimtable lam-matrix"></table></div>
+          <p class="hint">b̂<sub>ii</sub> = 1 for frozen i; b̂<sub>ij</sub> = #(unfrozen arrows i→j) − #(arrows j→i). Shaded entries lie between frozen vertices.</p>
+        </details>
+        <div id="lam-table-wrap">
+          <div class="lam-title">Poisson coefficient matrix Λ</div>
+          <div class="matrix-scroll"><table id="lam-table" class="dimtable lam-matrix"></table></div>
+        </div>
+        <button id="lam-explain">Explain in the Proof panel</button>
+        <div class="ar-box lam-gen">
+          <div class="ar-head">Monoidal seed Q<sup>[a,b]</sup>(w₀)</div>
+          <p class="hint">The initial seed of Kashiwara–Kim–Oh–Park for the category C<sub>g</sub><sup>[a,b],D,w₀</sup>, with its frozen arrows and potential (§5.3).</p>
+          <div class="row">
+            <label for="lam-type">Δ</label>
+            <select id="lam-type" aria-label="Dynkin type"><option value="A">A</option><option value="D">D</option><option value="E">E</option></select>
+            <input id="lam-rank" type="number" min="1" max="8" value="3" aria-label="Rank">
+          </div>
+          <div class="row">
+            <select id="lam-orient" aria-label="Orientation for an adapted word">
+              <option value="linear">Adapted: arrows i → j for i &lt; j</option>
+              <option value="linear-rev">Adapted: arrows j → i for i &lt; j</option>
+              <option value="bipartite">Adapted: bipartite</option>
+              <option value="bipartite-rev">Adapted: bipartite, reversed</option>
+              <option value="custom">Custom word</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="lam-word">w₀</label>
+            <input id="lam-word" type="text" spellcheck="false" aria-label="Reduced word of the longest element">
+          </div>
+          <div class="row">
+            <label for="lam-a">[a, b]</label>
+            <input id="lam-a" type="number" value="-5" aria-label="a">
+            <input id="lam-b" type="number" value="0" aria-label="b">
+          </div>
+          <p class="hint" id="lam-gen-status"></p>
+          <button id="lam-build" class="primary">Build Q<sup>[a,b]</sup>(w₀)</button>
+        </div>
+        <div id="lam-kr" class="lam-kr"></div>
       </section>
 
       <section id="pa-section">
@@ -305,6 +355,7 @@
         <li>With the <b>Delete</b> tool, clicking an arrow removes one arrow and clicking a vertex removes the vertex.</li>
         <li>With the <b>Select</b> tool, drag vertices to move them; <b>double-click a vertex</b> to mutate there.</li>
         <li>The <b>Proof</b> panel in the bottom-right corner explains every step, typeset like a LaTeX document (KaTeX, Computer Modern fonts): each edit, each mutation (the three combinatorial steps checked against the matrix formula) and each dimension vector you highlight. The AR quiver window has its own Proof panel showing how the picture is computed.</li>
+        <li><b>Λ-invariant</b> (Canesin–Cao–Janssens, arXiv:2605.03925): the panel on the right shows the Euler matrix B̂ of the ice quiver and the Poisson coefficient matrix Λ = |det B̂|·(B̂⁻ᵀ − B̂⁻¹), which forms a compatible pair with B̃. Turn on <b>Frozen arrows</b> to draw arrows between frozen vertices (blue) and to mutate by the extended Fomin–Zelevinsky rule, under which Λ mutates as μ<sub>k</sub>(Λ) = E<sub>k</sub>ᵀΛE<sub>k</sub>. <b>Build Q<sup>[a,b]</sup>(w₀)</b> constructs the initial monoidal seed of Kashiwara–Kim–Oh–Park from a Dynkin type, a reduced word of w₀ and an interval; for an adapted word the entries of Λ are the Λ-invariants of the Kirillov–Reshetikhin modules listed (Theorem D).</li>
         <li>The <b>Path algebra kQ</b> panel on the right gives the dimension of kQ (or of the truncation kQ/R<sup>L</sup>) and the dimension vectors of the indecomposable projectives P(i), injectives I(i) and simples S(i). Click a row to show the dimension vector on the canvas and the radical / socle layers.</li>
         <li><b>AR quiver</b>: for the path algebra kQ of an acyclic quiver, the Auslander–Reiten quiver is computed by knitting. Dynkin types (A/D/E) give all indecomposables; Euclidean types also show the regular components (exceptional and homogeneous tubes); wild types show the first layers of the preprojective and preinjective components. In the window you can also switch to the bounded derived category D<sup>b</sup>(mod kQ) (ℤQ, with a chosen range of shifts) and the cluster category C<sub>Q</sub> = D<sup>b</sup>/τ⁻¹[1] (all objects for Dynkin types, in bijection with cluster variables).</li>
       </ul>
@@ -327,7 +378,8 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="vendor/katex/katex.min.js?v=0.16.11"></script>
-  <script src="quiver-core.js?v=9"></script>
+  <script src="quiver-core.js?v=10"></script>
+  <script src="lambda-core.js?v=10"></script>
   <script src="ar-core.js?v=10"></script>
   <script src="app.js?v=11"></script>
 </body>
